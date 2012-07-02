@@ -3,7 +3,7 @@ unit IocpLogger;
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, uGlobalVars, IocpUtils{$if COMPILERVERSION < 20}, cUnicode{$ifend};
+  Windows, Classes, SysUtils, SyncObjs, uGlobalVars, IocpUtils;
 
 type
   TLogType = (ltNormal, ltWarning, ltError, ltException);
@@ -184,30 +184,6 @@ begin
   end;
 end;
 
-function WideStringReplace(const s: UnicodeString; const Src, Dst: UnicodeString): UnicodeString;
-{$if COMPILERVERSION < 20}
-var
-  i, ls, ld, l: Integer;
-begin
-  Result := s;
-  ls := Length(Src);
-  ld := Length(Dst);
-  i := 1;
-  repeat
-    i := WidePos(Src, Result, i);
-    if (i < 1) then Break;
-
-    l := Length(Result);
-    Result := WideCopyRange(Result, 1, i - 1) + Dst + WideCopyRange(Result, i + ls, l);
-    Inc(i, ld);
-  until False;
-end;
-{$else}
-begin
-  Result := StringReplace(S, Src, Dst, [rfReplaceAll]);
-end;
-{$ifend}
-
 procedure TIocpLogger.AppendLog(const Log: UnicodeString; const TimeFormat: string; LogType: TLogType; CRLF: string);
 var
   LogText: UnicodeString;
@@ -215,7 +191,7 @@ begin
   try
     AddRef;
     if (CRLF <> '') then
-      LogText := WideStringReplace(WideStringReplace(Log, #13#10, CRLF),  #10, CRLF)
+      LogText := StringReplace(StringReplace(Log, #13#10, CRLF, [rfReplaceAll]),  #10, CRLF, [rfReplaceAll])
     else
       LogText := Log;
     LogText := ThreadFormatDateTime(TimeFormat, Now) + ' ' + LogText + #13#10;
@@ -243,7 +219,7 @@ end;
 
 procedure TIocpLogger.AppendLog(const Fmt: UnicodeString; const Args: array of const; const TimeFormat: string; LogType: TLogType; CRLF: string);
 begin
-  AppendLog(ThreadWideFormat(Fmt, Args), TimeFormat, LogType, CRLF);
+  AppendLog(ThreadFormat(Fmt, Args), TimeFormat, LogType, CRLF);
 end;
 
 function TIocpLogger.AddRef: Integer;
@@ -253,7 +229,7 @@ end;
 
 procedure TIocpLogger.AppendLog(const Fmt: UnicodeString; const Args: array of const; LogType: TLogType; CRLF: string);
 begin
-  AppendLog(ThreadWideFormat(Fmt, Args), LogType, CRLF);
+  AppendLog(ThreadFormat(Fmt, Args), LogType, CRLF);
 end;
 
 procedure TIocpLogger.AppendStrToLogFile(const S: UnicodeString; LogType: TLogType);
