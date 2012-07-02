@@ -1,2 +1,31 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<BorlandProject/>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2012/06/19 15:29:12.000.303,=rtl.dcp</Transaction>
+    <Transaction>2012/06/19 15:30:09.000.782,=C:\VCL\VaniPackage\IOCP\IocpPacketSocket.pas</Transaction>
+    <Transaction>2012/06/19 15:30:09.000.729,=C:\VCL\VaniPackage\IOCP\IocpFileServer.pas</Transaction>
+    <Transaction>2012/06/19 15:30:09.000.835,=C:\VCL\VaniPackage\IOCP\IocpVariantSocket.pas</Transaction>
+    <Transaction>2012/06/19 15:30:09.000.765,=C:\VCL\VaniPackage\IOCP\IocpHttpTunnel.pas</Transaction>
+    <Transaction>2012/06/19 15:30:09.000.818,=C:\VCL\VaniPackage\IOCP\IocpTcpSocket.pas</Transaction>
+    <Transaction>2012/06/19 15:30:09.000.717,=C:\VCL\VaniPackage\IOCP\IocpFileClient.pas</Transaction>
+    <Transaction>2012/06/19 15:30:09.000.751,=C:\VCL\VaniPackage\IOCP\IocpHttpServer.pas</Transaction>
+    <Transaction>2012/06/19 15:31:15.000.656,C:\Users\Administrator\Documents\RAD Studio\Projects\Package1.dproj=C:\VCL\VaniPackage\IOCP\Package\IocpXE2.dproj</Transaction>
+    <Transaction>2012/06/19 15:31:46.000.945,C:\VCL\VaniPackage\IOCP\IocpPacketSocket.pas=</Transaction>
+    <Transaction>2012/06/19 15:31:46.000.871,C:\VCL\VaniPackage\IOCP\IocpFileClient.pas=</Transaction>
+    <Transaction>2012/06/19 15:31:46.000.911,C:\VCL\VaniPackage\IOCP\IocpHttpServer.pas=</Transaction>
+    <Transaction>2012/06/19 15:31:46.000.960,C:\VCL\VaniPackage\IOCP\IocpTcpSocket.pas=</Transaction>
+    <Transaction>2012/06/19 15:31:46.000.925,C:\VCL\VaniPackage\IOCP\IocpHttpTunnel.pas=</Transaction>
+    <Transaction>2012/06/19 15:31:46.000.894,C:\VCL\VaniPackage\IOCP\IocpFileServer.pas=</Transaction>
+    <Transaction>2012/06/19 15:31:46.000.977,C:\VCL\VaniPackage\IOCP\IocpVariantSocket.pas=</Transaction>
+    <Transaction>2012/06/19 15:31:56.000.695,=C:\VCL\VaniPackage\IOCP\IocpFileClient.pas</Transaction>
+    <Transaction>2012/06/19 15:32:01.000.518,C:\VCL\VaniPackage\IOCP\IocpFileClient.pas=</Transaction>
+    <Transaction>2012/06/19 15:32:30.000.605,=C:\VCL\VaniPackage\IOCP\IocpHttpServer.pas</Transaction>
+    <Transaction>2012/06/19 15:32:30.000.664,=C:\VCL\VaniPackage\IOCP\IocpTcpSocket.pas</Transaction>
+    <Transaction>2012/06/19 15:32:30.000.572,=C:\VCL\VaniPackage\IOCP\IocpFileClient.pas</Transaction>
+    <Transaction>2012/06/19 15:32:30.000.638,=C:\VCL\VaniPackage\IOCP\IocpPacketSocket.pas</Transaction>
+    <Transaction>2012/06/19 15:32:30.000.587,=C:\VCL\VaniPackage\IOCP\IocpFileServer.pas</Transaction>
+    <Transaction>2012/06/19 15:32:30.000.621,=C:\VCL\VaniPackage\IOCP\IocpHttpTunnel.pas</Transaction>
+    <Transaction>2012/06/19 15:32:30.000.681,=C:\VCL\VaniPackage\IOCP\IocpVariantSocket.pas</Transaction>
+    <Transaction>2012/06/19 15:33:23.000.322,=vcl.dcp</Transaction>
+  </Transactions>
+</BorlandProject>

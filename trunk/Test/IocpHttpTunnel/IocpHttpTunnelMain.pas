@@ -5,16 +5,14 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, ExtCtrls, FileCtrl, System.Generics.Collections,
-  VaniFunc, IocpTcpSocket, IocpHttpTunnel, IocpHttpUtils, IocpLogger,
-  Vcl.Buttons, uIocpHttpTunnelConfig;
+  IocpUtils, IocpTcpSocket, IocpHttpTunnel, IocpHttpUtils, IocpLogger,
+  Vcl.Buttons;
 
 type
   TTestIocpHttpTunnel = class(TIocpHttpTunnel)
   private
     FDestHost: string;
     FDestPort: Word;
-
-    function GetDstHost(const Host: string; out DstHost: THostEntry): Boolean;
   protected
     function TriggerConfirmForward(Client: TIocpHttpTunnelConnection;
       out ServerAddr: string; out ServerPort: Word): Boolean; override;
@@ -137,10 +135,6 @@ begin
   {$endif}
   FStartTick := GetTickCount;
   FServer := TTestIocpHttpTunnel.Create(nil);
-
-  edtPort.Text := IntToStr(IocpHttpTunnelConfig.Port);
-  edtTimeout.Text := IntToStr(IocpHttpTunnelConfig.Timeout);
-  edtLife.Text := IntToStr(IocpHttpTunnelConfig.Lifeout);
 end;
 
 procedure TfmIocpHttpTunnel.FormDestroy(Sender: TObject);
@@ -187,39 +181,14 @@ end;
 
 { TTestIocpHttpTunnel }
 
-function TTestIocpHttpTunnel.GetDstHost(const Host: string; out DstHost: THostEntry): Boolean;
-var
-  Tunnel: TTunnelEntry;
-begin
-  for Tunnel in IocpHttpTunnelConfig.TunnelList do
-  begin
-    if SameText(Tunnel.SrcHost.Host, Host) then
-    begin
-      DstHost := Tunnel.DstHost;
-      Exit(True);
-    end;
-  end;
-
-  Result := False;
-end;
-
 function TTestIocpHttpTunnel.TriggerConfirmForward(
   Client: TIocpHttpTunnelConnection;
   out ServerAddr: string; out ServerPort: Word): Boolean;
-var
-  DstHost: THostEntry;
 begin
-{  ServerAddr := FDestHost;
+  ServerAddr := FDestHost;
   ServerPort := FDestPort;
 
-  Result := True;}
-
-  Result := GetDstHost(Client.RequestHostName, DstHost);
-  if Result then
-  begin
-    ServerAddr := DstHost.Host;
-    ServerPort := DstHost.Port;
-  end;
+  Result := True;
 end;
 
 end.

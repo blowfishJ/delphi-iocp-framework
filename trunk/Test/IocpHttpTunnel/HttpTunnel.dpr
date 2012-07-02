@@ -2,8 +2,7 @@ program HttpTunnel;
 
 uses
   Vcl.Forms,
-  IocpHttpTunnelMain in 'IocpHttpTunnelMain.pas' {fmIocpHttpTunnel},
-  uIocpHttpTunnelConfig in 'uIocpHttpTunnelConfig.pas';
+  IocpHttpTunnelMain in 'IocpHttpTunnelMain.pas' {fmIocpHttpTunnel};
 
 {$R *.res}
 

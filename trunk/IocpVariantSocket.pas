@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, Math, JwaWinsock2, IocpTcpSocket, IocpPacketSocket, IocpVariantPacket,
-  VaniFunc;
+  IocpUtils;
 
 type
   TIocpVariantServerConnection = class(TIocpPacketConnection);

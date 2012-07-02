@@ -1,6 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <BorlandProject>
-	<Transactions>
-    <Transaction>2012/06/11 19:46:25.000.334,C:\VCL\VaniPackage\IOCP\Test\IocpVariantClient\IocpPacketClient.dproj=C:\VCL\VaniPackage\IOCP\Test\IocpVariantClient\IocpVariantClient.dproj</Transaction>
+  <Transactions>
+    <Transaction>2012/07/02 15:44:30.438,=C:\VCL\VaniPackage\IOCP\Test\IocpVariantClient\Unit1.pas</Transaction>
+    <Transaction>2012/07/02 15:44:43.366,C:\VCL\VaniPackage\IOCP\IocpUtils.pas=C:\VCL\VaniPackage\IOCP\Test\IocpVariantClient\Unit1.pas</Transaction>
+    <Transaction>2012/07/02 15:44:50.009,C:\VCL\VaniPackage\IOCP\IocpUtils.pas=</Transaction>
   </Transactions>
 </BorlandProject>

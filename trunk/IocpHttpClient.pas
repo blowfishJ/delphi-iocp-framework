@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, Classes, SysUtils, StrUtils, SyncObjs, Math, IoUtils,
   IocpTcpSocket, IocpThreadPool, IocpHttpUtils, IocpBuffer,
-  VaniFunc, IocpLogger;
+  IocpUtils, IocpLogger;
 
 const
   IOCP_HTTP_CLIENT_VERSION = 'IocpHttpClient/1.0';

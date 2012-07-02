@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, ExtCtrls, StdCtrls, SyncObjs, JwaWinsock2,
-  IocpTcpSocket, IocpVariantPacket, IocpVariantSocket, IocpLogger, VaniFunc;
+  IocpTcpSocket, IocpVariantPacket, IocpVariantSocket, IocpLogger, IocpUtils;
 
 {$define __SND_FIXED_SIZE__}
 
