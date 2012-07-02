@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, ExtCtrls, IoUtils, DsiWin32,
-  VaniFunc, IocpTcpSocket, IocpPacketSocket, IocpLogger, uGlobalVars;
+  IocpUtils, IocpTcpSocket, IocpPacketSocket, IocpLogger, uGlobalVars;
 
 type
   TTestIocpServer = class(TIocpPacketServer)

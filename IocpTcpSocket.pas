@@ -51,7 +51,7 @@ uses
   JwaWinsock2, JwaWS2tcpip, JwaMSWSock, WinsockEx, System.Generics.Collections,
   IocpApiFix, IocpThreadPool, IocpReadWriteLocker, IocpMemoryPool,
   IocpObjectPool, IocpBuffer, IocpQueue, IocpTimerQueue, IocpLogger,
-  VaniFunc, DSiWin32;
+  IocpUtils, DSiWin32;
 
 const
   SHUTDOWN_FLAG = ULONG_PTR(-1);

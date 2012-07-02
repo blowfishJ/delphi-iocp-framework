@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, IoUtils, Math,
-  IocpVariantPacket, IocpVariantSocket, IocpFileConst, VaniFunc, IocpLogger;
+  IocpVariantPacket, IocpVariantSocket, IocpFileConst, IocpUtils, IocpLogger;
 
 const
   BLOCK_SIZE = 16 * 1024;

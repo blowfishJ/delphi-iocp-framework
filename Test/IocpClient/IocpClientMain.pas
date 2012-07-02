@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, ExtCtrls, StdCtrls, SyncObjs, IocpTcpSocket, IocpLogger, Spin, WinSock2,
-  VaniFunc;
+  IocpUtils;
 
 {$define __SND_FIXED_SIZE__}
 

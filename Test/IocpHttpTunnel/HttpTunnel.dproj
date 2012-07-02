@@ -90,7 +90,6 @@
 			<DCCReference Include="IocpHttpTunnelMain.pas">
 				<Form>fmIocpHttpTunnel</Form>
 			</DCCReference>
-			<DCCReference Include="uIocpHttpTunnelConfig.pas"/>
 			<BuildConfiguration Include="Release">
 				<Key>Cfg_2</Key>
 				<CfgParent>Base</CfgParent>

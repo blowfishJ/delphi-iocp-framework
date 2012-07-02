@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, IocpTcpSocket, StdCtrls, ExtCtrls, SyncObjs, VaniFunc, IocpLogger;
+  Dialogs, IocpTcpSocket, StdCtrls, ExtCtrls, SyncObjs, IocpUtils, IocpLogger;
 
 {$define __SND_FIXED_SIZE__}
 

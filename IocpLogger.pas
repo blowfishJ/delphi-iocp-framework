@@ -3,7 +3,7 @@ unit IocpLogger;
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, uGlobalVars, VaniFunc{$if COMPILERVERSION < 20}, cUnicode{$ifend};
+  Windows, Classes, SysUtils, SyncObjs, uGlobalVars, IocpUtils{$if COMPILERVERSION < 20}, cUnicode{$ifend};
 
 type
   TLogType = (ltNormal, ltWarning, ltError, ltException);

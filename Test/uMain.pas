@@ -6,7 +6,7 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms, Dialogs,
   IocpTcpSocket, IocpTcpServer, IocpTcpClient, IocpFileServer, IocpFileClient, IocpHttpServer,
   IocpHttpUtils,
-  VaniTCPDefine, Spin, StdCtrls, uGlobalVars, VaniFunc, OverbyteIcsHttpSrv, OverbyteIcsLibrary,
+  VaniTCPDefine, Spin, StdCtrls, uGlobalVars, IocpUtils, OverbyteIcsHttpSrv, OverbyteIcsLibrary,
   IocpHttpClient, IocpLogger, IocpThreadPool, IocpHttpTunnel;
 
 const
