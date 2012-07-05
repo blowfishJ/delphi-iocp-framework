@@ -1,6 +1,2 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<BorlandProject>
-	<Transactions>
-    <Transaction>2012/06/08 15:20:43.000.531,C:\VCL\VaniPackage\IOCP\Test\IocpPacketClient\IocpPacketClient.dproj=C:\VCL\VaniPackage\IOCP\Test\IocpPacketClient\IocpClient.dproj</Transaction>
-  </Transactions>
-</BorlandProject>
+<BorlandProject/>

@@ -1,9 +1,11 @@
 unit IocpPacketSocket;
 
+{$define __LOGIC_THREAD_POOL__}
+
 interface
 
 uses
-  Windows, Classes, SysUtils, Math, JwaWinsock2, IocpTcpSocket, IocpLogger;
+  Windows, Classes, SysUtils, Math, JwaWinsock2, IocpTcpSocket, IocpThreadPool, IocpLogger;
 
 type
   TIocpHeader = record
@@ -12,6 +14,7 @@ type
     DataSize: Integer;
   end;
 
+  PIocpPacket = ^TIocpPacket;
   TIocpPacket = record
     Header: TIocpHeader;
     Data: Pointer;
@@ -21,7 +24,7 @@ type
   TIocpPacketConnection = class(TIocpSocketConnection)
   private
     FRecvPacketBytes: Integer;
-    FRecvPacket: TIocpPacket;
+    FRecvPacket: PIocpPacket;
 
     function CalcHeaderCrc(const Header: TIocpHeader): LongWord;
     function PackData(Buf: Pointer; Len: Integer): TIocpPacket;
@@ -33,16 +36,37 @@ type
     function Send(Buf: Pointer; Size: Integer): Integer; override;
   end;
 
+  {
+    *** Iocp逻辑(业务处理)请求对象 ***
+  }
+  TIocpPacketRequest = class(TIocpThreadRequest)
+  private
+    Client: TIocpPacketConnection;
+    Packet: PIocpPacket;
+  protected
+    procedure Execute(Thread: TProcessorThread); override;
+  public
+    constructor Create(Client: TIocpPacketConnection; Packet: PIocpPacket);
+  end;
+
   TIocpPacketEvent = procedure(Sender: TObject; Client: TIocpPacketConnection; const Packet: TIocpPacket) of object;
   TIocpPacketSocket = class(TIocpTcpSocket)
   private
+    {$ifdef __LOGIC_THREAD_POOL__}
+    FJobThreadPool: TIocpThreadPool;
+    {$endif}
     FCrcEnabled: Boolean;
     FOnPacketRecv: TIocpPacketEvent;
     FOnPacketHeaderCrcError: TIocpPacketEvent;
     FOnPacketDataCrcError: TIocpPacketEvent;
   protected
-    function TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean; override;
+    {$ifdef __LOGIC_THREAD_POOL__}
+    procedure StartupWorkers; override;
+    procedure ShutdownWorkers; override;
+    {$endif}
 
+    function TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean; override;
+  protected
     procedure TriggerPacketRecv(Client: TIocpPacketConnection; const Packet: TIocpPacket); virtual;
     procedure TriggerPacketHeaderCrcError(Client: TIocpPacketConnection; const Packet: TIocpPacket); virtual;
     procedure TriggerPacketDataCrcError(Client: TIocpPacketConnection; const Packet: TIocpPacket); virtual;
@@ -155,6 +179,24 @@ begin
   Result := Size;
 end;
 
+{ TIocpPacketRequest }
+
+constructor TIocpPacketRequest.Create(Client: TIocpPacketConnection;
+  Packet: PIocpPacket);
+begin
+  Self.Client := Client;
+  Self.Packet := Packet;
+end;
+
+procedure TIocpPacketRequest.Execute(Thread: TProcessorThread);
+begin
+  if (Packet = nil) then Exit;
+  TIocpPacketSocket(Client.Owner).TriggerPacketRecv(Client, Packet^);
+  if (Packet.Data <> nil) then
+    FreeMem(Packet.Data);
+  Dispose(Packet);
+end;
+
 { TIocpPacketSocket }
 
 constructor TIocpPacketSocket.Create(AOwner: TComponent);
@@ -164,6 +206,27 @@ begin
   ConnectionClass := TIocpPacketConnection;
   FCrcEnabled := True;
 end;
+
+{$ifdef __LOGIC_THREAD_POOL__}
+procedure TIocpPacketSocket.StartupWorkers;
+begin
+  if not Assigned(FJobThreadPool) then
+    FJobThreadPool := TIocpThreadPool.Create;
+
+  inherited StartupWorkers;
+end;
+
+procedure TIocpPacketSocket.ShutdownWorkers;
+begin
+  if Assigned(FJobThreadPool) then
+  begin
+    FJobThreadPool.Shutdown;
+    FreeAndNil(FJobThreadPool);
+  end;
+
+  inherited ShutdownWorkers;
+end;
+{$endif}
 
 function TIocpPacketSocket.TriggerClientRecvData(Client: TIocpSocketConnection;
   Buf: Pointer; Len: Integer): Boolean;
@@ -175,6 +238,12 @@ begin
 
   with TIocpPacketConnection(Client) do
   begin
+    if (FRecvPacket = nil) then
+    begin
+      New(FRecvPacket);
+      ZeroMemory(FRecvPacket, SizeOf(TIocpPacket));
+    end;
+
     // 包头
     if (FRecvPacketBytes < SizeOf(TIocpHeader)) then
     begin
@@ -199,7 +268,7 @@ begin
       // 这才能保证收到的是有效包，而不是不可靠来源发来的垃圾包
       if not CheckHeaderCrc(FRecvPacket.Header) then
       begin
-        TriggerPacketHeaderCrcError(TIocpPacketConnection(Client), FRecvPacket);
+        TriggerPacketHeaderCrcError(TIocpPacketConnection(Client), FRecvPacket^);
         Client.Disconnect;
         Exit;
       end;
@@ -210,6 +279,7 @@ begin
           GetMem(FRecvPacket.Data, FRecvPacket.Header.DataSize);
         except
           AppendLog('%s.TriggerClientRecvData 分配内存块失败，大小 = %d字节', [Self.ClassName, FRecvPacket.Header.DataSize], ltWarning);
+          FreeAndNil(FRecvPacket);
           Client.Disconnect;
           Exit;
         end;
@@ -222,19 +292,26 @@ begin
 
       if (FRecvPacketBytes >= SizeOf(TIocpHeader) + FRecvPacket.Header.DataSize) then
       begin
-        if FCrcEnabled and not CheckDataCrc(FRecvPacket) then
+        if FCrcEnabled and not CheckDataCrc(FRecvPacket^) then
         begin
-          TriggerPacketDataCrcError(TIocpPacketConnection(Client), FRecvPacket);
+          TriggerPacketDataCrcError(TIocpPacketConnection(Client), FRecvPacket^);
+          FreeAndNil(FRecvPacket);
           Client.Disconnect;
           Exit;
         end;
 
         // 一个包正确完整接收后，触发事件
-        TriggerPacketRecv(TIocpPacketConnection(Client), FRecvPacket);
-
+        {$ifdef __LOGIC_THREAD_POOL__}
+        FJobThreadPool.AddRequest(TIocpPacketRequest.Create(TIocpPacketConnection(Client), FRecvPacket));
+        FRecvPacketBytes := 0;
+        FRecvPacket := nil;
+        {$else}
+        TriggerPacketRecv(TIocpPacketConnection(Client), FRecvPacket^);
         FRecvPacketBytes := 0;
         FreeMem(FRecvPacket.Data);
-        FRecvPacket.Data := nil;
+        Dispose(FRecvPacket);
+        FRecvPacket := nil;
+        {$endif}
 
         // 如果处理完一个完整的包之后还有剩余数据
         // 递归继续处理

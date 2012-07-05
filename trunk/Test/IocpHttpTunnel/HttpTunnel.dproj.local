@@ -1,21 +1,2 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<BorlandProject>
-	<Transactions>
-    <Transaction>2012/04/10 14:24:37.000.050,=C:\Users\Administrator\Documents\RAD Studio\Projects\Unit1.pas</Transaction>
-    <Transaction>2012/04/26 10:09:02.000.368,=C:\Users\Administrator\Documents\RAD Studio\Projects\Unit2.pas</Transaction>
-    <Transaction>2012/04/26 10:09:26.000.712,C:\VCL\VaniPackage\Test\HttpTunnel.dproj=C:\Users\Administrator\Documents\RAD Studio\Projects\Project1.dproj</Transaction>
-    <Transaction>2012/04/26 10:09:37.000.289,=C:\VCL\VaniPackage\Test\IocpHttpTunnelMain.pas</Transaction>
-    <Transaction>2012/04/26 10:09:49.000.113,C:\VCL\VaniPackage\Test\IocpHttpTunnelMainx.dfm=C:\VCL\VaniPackage\Test\IocpHttpTunnelMain.dfm</Transaction>
-    <Transaction>2012/04/26 10:09:49.000.113,C:\VCL\VaniPackage\Test\IocpHttpTunnelMainx.pas=C:\VCL\VaniPackage\Test\IocpHttpTunnelMain.pas</Transaction>
-    <Transaction>2012/04/26 10:09:53.000.099,C:\VCL\VaniPackage\Test\IocpHttpTunnelMain.pas=C:\VCL\VaniPackage\Test\IocpHttpTunnelMainx.pas</Transaction>
-    <Transaction>2012/04/26 10:09:53.000.099,C:\VCL\VaniPackage\Test\IocpHttpTunnelMain.dfm=C:\VCL\VaniPackage\Test\IocpHttpTunnelMainx.dfm</Transaction>
-    <Transaction>2012/05/21 14:55:49.000.485,=C:\VCL\VaniPackage\Test\Unit2.pas</Transaction>
-    <Transaction>2012/05/21 14:57:20.000.044,C:\VCL\VaniPackage\Test\uHostCfg.pas=C:\VCL\VaniPackage\Test\Unit2.pas</Transaction>
-    <Transaction>2012/05/21 14:57:20.000.044,C:\VCL\VaniPackage\Test\uHostCfg.dfm=C:\VCL\VaniPackage\Test\Unit2.dfm</Transaction>
-    <Transaction>2012/05/21 15:01:17.000.410,=C:\VCL\VaniPackage\Test\uIocpHttpTunnelConfig.pas</Transaction>
-    <Transaction>2012/05/21 15:01:25.000.048,C:\VCL\VaniPackage\Test\uIocpHttpTunnelConfiga.pas=C:\VCL\VaniPackage\Test\uIocpHttpTunnelConfig.pas</Transaction>
-    <Transaction>2012/05/21 15:01:27.000.933,C:\VCL\VaniPackage\Test\uIocpHttpTunnelConfig.pas=C:\VCL\VaniPackage\Test\uIocpHttpTunnelConfiga.pas</Transaction>
-    <Transaction>2012/05/21 15:02:30.000.931,C:\VCL\VaniPackage\Test\uHostCfg.pas=</Transaction>
-    <Transaction>2012/06/27 10:06:30.070,C:\VCL\VaniPackage\IOCP\Test\IocpHttpTunnel\uIocpHttpTunnelConfig.pas=</Transaction>
-  </Transactions>
-</BorlandProject>
+<BorlandProject/>

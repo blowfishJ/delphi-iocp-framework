@@ -1,5 +1,7 @@
 unit IocpHttpServer;
 
+{$define __LOGIC_THREAD_POOL__}
+
 interface
 
 uses
@@ -112,10 +114,25 @@ type
     property RequestPostData: TIocpStringStream read FRequestPostData;
   end;
 
+  {
+    *** Iocp逻辑(业务处理)请求对象 ***
+  }
+  TIocpHttpRequest = class(TIocpThreadRequest)
+  private
+    Client: TIocpHttpConnection;
+  protected
+    procedure Execute(Thread: TProcessorThread); override;
+  public
+    constructor Create(Client: TIocpHttpConnection);
+  end;
+
   TIocpHttpAcceptPostDataEvent = function(Sender: TObject; DataSize: Int64): Boolean of object;
   TIocpHttpRequestEvent = procedure(Sender: TObject; Client: TIocpHttpConnection) of object;
   TIocpHttpServer = class(TSimpleIocpTcpServer)
   private
+    {$ifdef __LOGIC_THREAD_POOL__}
+    FJobThreadPool: TIocpThreadPool;
+    {$endif}
     FRootDir: string;
     FAcceptPostData: TIocpHttpAcceptPostDataEvent;
     FOnRequest: TIocpHttpRequestEvent;
@@ -124,6 +141,11 @@ type
     procedure ParseRecvData(Client: TIocpHttpConnection; buf: Pointer; len: Integer);
     function GetRootDir: string;
   protected
+    {$ifdef __LOGIC_THREAD_POOL__}
+    procedure StartupWorkers; override;
+    procedure ShutdownWorkers; override;
+    {$endif}
+
     function TriggerClientRecvData(Client: TIocpSocketConnection; buf: Pointer; len: Integer): Boolean; override;
     function TriggerClientSentData(Client: TIocpSocketConnection; buf: Pointer; len: Integer): Boolean; override;
   protected
@@ -697,6 +719,18 @@ begin
   end;
 end;
 
+{ TIocpHttpRequest }
+
+constructor TIocpHttpRequest.Create(Client: TIocpHttpConnection);
+begin
+  Self.Client := Client;
+end;
+
+procedure TIocpHttpRequest.Execute(Thread: TProcessorThread);
+begin
+  TIocpHttpServer(Client.Owner).DoOnRequest(Client);
+end;
+
 { TIocpHttpServer }
 
 constructor TIocpHttpServer.Create(AOwner: TComponent);
@@ -852,9 +886,34 @@ begin
   // 在解析完请求数据之后再调用线程池
   if (Client.FHttpState = hcDone) then
   begin
+    {$ifdef __LOGIC_THREAD_POOL__}
+    FJobThreadPool.AddRequest(TIocpHttpRequest.Create(Client));
+    {$else}
     DoOnRequest(Client);
+    {$endif}
   end;
 end;
+
+{$ifdef __LOGIC_THREAD_POOL__}
+procedure TIocpHttpServer.StartupWorkers;
+begin
+  if not Assigned(FJobThreadPool) then
+    FJobThreadPool := TIocpThreadPool.Create;
+
+  inherited StartupWorkers;
+end;
+
+procedure TIocpHttpServer.ShutdownWorkers;
+begin
+  if Assigned(FJobThreadPool) then
+  begin
+    FJobThreadPool.Shutdown;
+    FreeAndNil(FJobThreadPool);
+  end;
+
+  inherited ShutdownWorkers;
+end;
+{$endif}
 
 function TIocpHttpServer.TriggerAcceptPostData(DataSize: Int64): Boolean;
 begin

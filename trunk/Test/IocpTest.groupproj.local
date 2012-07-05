@@ -1,7 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <BorlandProject>
-	<Transactions/>
 	<Default.Personality>
-		<Projects ActiveProject="C:\VCL\VaniPackage\IOCP\Package\IocpXE2.dproj"/>
+		<Projects ActiveProject="C:\VCL\VaniPackage\IOCP\Test\IocpPacketClient\IocpPacketClient.dproj"/>
 	</Default.Personality>
 </BorlandProject>
