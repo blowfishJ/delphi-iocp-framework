@@ -1,7 +1,6 @@
 unit IocpMemoryPool;
 
-//{$define __ZERO_MEMORY__}
-{$DEFINE __HEAP_ALLOC__}
+{$define __ZERO_MEMORY__}
 
 interface
 
@@ -12,9 +11,7 @@ type
   TIocpMemoryPool = class
   private
     FRefCount: Integer;
-    {$IFDEF __HEAP_ALLOC__}
     FHeapHandle: THandle;
-    {$ENDIF}
     FBlockSize, FMaxFreeBlocks: Integer;
     FFreeMemoryBlockList: TList; // 经过实际测试，使用Classes.TList比Collections.TList<>效率更高
     FUsedMemoryBlockList: TList;
@@ -34,8 +31,10 @@ type
     function AddRef: Integer;
     function Release: Boolean;
     function GetMemory: Pointer;
-    procedure FreeMemory(var P: Pointer);
+    procedure FreeMemory(const P: Pointer);
     procedure Clear;
+
+    property MaxFreeBlocks: Integer read FMaxFreeBlocks write SetMaxFreeBlocks;
 
     property FreeMemoryBlockList: TList read FFreeMemoryBlockList;
     property UsedMemoryBlockList: TList read FUsedMemoryBlockList;
@@ -44,7 +43,6 @@ type
     property FreeBlocksSize: Integer read GetFreeBlocksSize;
     property UsedBlocks: Integer read GetUsedBlocks;
     property UsedBlocksSize: Integer read GetUsedBlocksSize;
-    property MaxFreeBlocks: Integer read FMaxFreeBlocks write SetMaxFreeBlocks;
   end;
 
 implementation
@@ -63,9 +61,7 @@ begin
   FFreeMemoryBlockList := TList.Create;
   FUsedMemoryBlockList := TList.Create;
   FLocker := TCriticalSection.Create;
-  {$IFDEF __HEAP_ALLOC__}
   FHeapHandle := GetProcessHeap;
-  {$ENDIF}
   FRefCount := 1;
 end;
 
@@ -102,6 +98,8 @@ begin
 end;
 
 function TIocpMemoryPool.GetMemory: Pointer;
+var
+  AllocFlag: DWORD;
 begin
   Lock;
   try
@@ -117,20 +115,17 @@ begin
     // 如果没有空闲内存块，分配新的内存块
     if (Result = nil) then
     begin
-      {$IFDEF __HEAP_ALLOC__}
-      Result := HeapAlloc(FHeapHandle, 0, FBlockSize);
-      {$ELSE}
-      Result := Pointer(GlobalAlloc(GPTR, FBlockSize));
-      {$ENDIF}
+      {$ifdef __ZERO_MEMORY__}
+      AllocFlag := 0;
+      {$else}
+      AllocFlag := $08;
+      {$endif}
+      Result := HeapAlloc(FHeapHandle, AllocFlag, FBlockSize);
       AddRef;
     end;
 
     if (Result <> nil) then
     begin
-      {$ifdef __ZERO_MEMORY__}
-      // 清零内存块
-      ZeroMemory(Result, FBlockSize);
-      {$endif}
       // 将取得的内存块放入已使用内存块列表
       FUsedMemoryBlockList.Add(Result);
     end else
@@ -140,7 +135,7 @@ begin
   end;
 end;
 
-procedure TIocpMemoryPool.FreeMemory(var P: Pointer);
+procedure TIocpMemoryPool.FreeMemory(const P: Pointer);
 begin
   if (P = nil) then Exit;
 
@@ -155,15 +150,9 @@ begin
     // 否则释放内存
     else
     begin
-      {$IFDEF __HEAP_ALLOC__}
       HeapFree(FHeapHandle, 0, P);
-      {$ELSE}
-      GlobalFree(HGLOBAL(P));
-      {$ENDIF}
       Release;
     end;
-
-    P := nil;
   finally
     Unlock;
   end;
@@ -180,11 +169,7 @@ begin
     begin
       P := FFreeMemoryBlockList[FFreeMemoryBlockList.Count - 1];
       if (P <> nil) then
-        {$IFDEF __HEAP_ALLOC__}
         HeapFree(FHeapHandle, 0, P);
-        {$ELSE}
-        GlobalFree(HGLOBAL(P));
-        {$ENDIF}
       FFreeMemoryBlockList.Delete(FFreeMemoryBlockList.Count - 1);
       Release;
     end;
@@ -194,11 +179,7 @@ begin
     begin
       P := FUsedMemoryBlockList[FUsedMemoryBlockList.Count - 1];
       if (P <> nil) then
-        {$IFDEF __HEAP_ALLOC__}
         HeapFree(FHeapHandle, 0, P);
-        {$ELSE}
-        GlobalFree(HGLOBAL(P));
-        {$ENDIF}
       FUsedMemoryBlockList.Delete(FUsedMemoryBlockList.Count - 1);
       Release;
     end;
