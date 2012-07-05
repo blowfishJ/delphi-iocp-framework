@@ -32,10 +32,6 @@ ZY. 2012.04.19
 // 接收缓存0拷贝，接收数据时直接使用程序设定的缓存，不用从Socket底层缓存拷贝
 //{$define __TCP_RCVBUF_ZERO_COPY__}
 
-// 智能发送队列，当待发送的数据不超过发送缓冲区大小，并且队列中没有未发完的数据时
-// 直接发送数据，不进入队列
-{$DEFINE __SMART_SND_QUEUE__}
-
 // 启用超时检测时钟
 {$DEFINE __TIME_OUT_TIMER__}
 
@@ -75,17 +71,17 @@ type
     *** 发送队列数据块结构 ***
     用于保存被拆分后的内存块
   }
-  PIocpIoBlock = ^TIocpIoBlock;
+  {PIocpIoBlock = ^TIocpIoBlock;
   TIocpIoBlock = record
     Buf: Pointer;
     Size: Integer;
-  end;
+  end;}
 
   {
     *** 发送队列 ***
     将待发送内存块根据内存缓冲池块大小拆分后,保存到队列中
   }
-  TIocpSendQueue = class
+(*  TIocpSendQueue = class
   private
     FLocker: TCriticalSection;
     FIocpQueue: TIocpPointerQueue;
@@ -109,7 +105,7 @@ type
     procedure Clear;
 
     property Count: Integer read GetCount;
-  end;
+  end; *)
 
   {
      *** Socket 连接 ***
@@ -121,16 +117,14 @@ type
     FRemoteIP: string;
     FRemotePort: Word;
 
-    FLocker: TCriticalSection;
     FRefCount: Integer;
     FDisconnected: Integer;
     FFirstTick, FLastTick: DWORD;
     FTag: Pointer;
     FSndBufSize, FRcvBufSize: Integer;
-    FRcvBuffer: array[0..NET_CACHE_SIZE - 1] of Byte;
+    FRcvBuffer: Pointer;
     FPendingSend: Integer;
     FPendingRecv: Integer;
-    FSndQueue: TIocpSendQueue;
     {$IFDEF __TIME_OUT_TIMER__}
     FTimer: TIocpTimerQueueTimer;
     FTimeout: DWORD;
@@ -145,7 +139,6 @@ type
     function GetOwner: TIocpTcpSocket;
 
     function InitSocket: Boolean;
-    procedure ResetBuffer;
     procedure UpdateTick;
 
     procedure IncPendingRecv;
@@ -156,7 +149,6 @@ type
     procedure IncPendingSend;
     procedure DecPendingSend;
     function PostWrite(const Buf: Pointer; Size: Integer): Boolean;
-    function SendFromQueue: Boolean;
 
     function _TriggerClientRecvData(Buf: Pointer; Len: Integer): Boolean;
     function _TriggerClientSentData(Buf: Pointer; Len: Integer): Boolean;
@@ -174,9 +166,6 @@ type
   public
     constructor Create(AOwner: TObject); override;
     destructor Destroy; override;
-
-    procedure Lock;
-    procedure Unlock;
 
     function AddRef: Integer;
     function Release: Boolean;
@@ -541,10 +530,10 @@ begin
 end;
 
 var
-  IoCachePool, IoQueuePool, FileCachePool: TIocpMemoryPool;
+  IoCachePool, {IoQueuePool, }FileCachePool: TIocpMemoryPool;
 
 { TIocpSendQueue }
-
+(*
 procedure TIocpSendQueue.Clear;
 var
   Buf: Pointer;
@@ -660,7 +649,7 @@ begin
     Size := -1;
     Result := False;
   end;
-end;
+end; *)
 
 { TIocpSocketConnection }
 
@@ -668,14 +657,12 @@ constructor TIocpSocketConnection.Create(AOwner: TObject);
 begin
   inherited Create(AOwner);
 
-  FLocker := TCriticalSection.Create;
-  FSndQueue := TIocpSendQueue.Create(Self);
+  FRcvBuffer := IoCachePool.GetMemory;
 end;
 
 destructor TIocpSocketConnection.Destroy;
 begin
-  FreeAndNil(FSndQueue);
-  FLocker.Free;
+  IoCachePool.FreeMemory(FRcvBuffer);
 
   inherited Destroy;
 end;
@@ -705,16 +692,6 @@ begin
 
   Owner.CloseSocket(FSocket);
   Release;
-end;
-
-procedure TIocpSocketConnection.Lock;
-begin
-  FLocker.Enter;
-end;
-
-procedure TIocpSocketConnection.Unlock;
-begin
-  FLocker.Leave;
 end;
 
 procedure TIocpSocketConnection.DecPendingRecv;
@@ -792,7 +769,7 @@ begin
     AppendLog('%s.InitSocket.setsockopt.SO_RCVBUF ERROR %d=%s', [ClassName, WSAGetLastError, SysErrorMessage(WSAGetLastError)], ltWarning);
     Exit;
   end;
-  FRcvBufSize := Length(FRcvBuffer);
+  FRcvBufSize := IoCachePool.BlockSize;
 {$ELSE}
   OptLen := SizeOf(FRcvBufSize);
   if (getsockopt(FSocket, SOL_SOCKET, SO_RCVBUF,
@@ -839,8 +816,6 @@ begin
   FRemoteIP := '';
   FRemotePort := 0;
 
-  ResetBuffer;
-
   FFirstTick := GetTickCount;
 
   {$IFDEF __TIME_OUT_TIMER__}
@@ -860,38 +835,16 @@ begin
   if IsClosed then Exit(-1);
 
   Result := Size;
-  try
-    Lock;
 
-    // 在IocpHttpServer的实际测试中发现，当Server发送的块大于4K的时候
-    // 浏览器收到的数据有可能会出现混乱，所以稳妥起见，这里将发送的内
-    // 存块拆分成4K的小块发送
-    while (Size > 0) do
-    begin
-      BlockSize := Min(4096, Size);
-      if not PostWrite(Buf, BlockSize) then Exit(-2);
-      Inc(PAnsiChar(Buf), BlockSize);
-      Dec(Size, BlockSize);
-    end;
-(*
-{$IFDEF __SMART_SND_QUEUE__}
-    if (FPendingSend = 0) and (Size <= NET_CACHE_SIZE) then
-    begin
-      if not PostWrite(Buf, Size) then Exit(-1);
-    end else
-    begin
-      if not FSndQueue.PushBuffer(Buf, Size) then Exit(-1);
-      if not SendFromQueue then Exit(-1);
-    end;
-{$ELSE}
-    if not FSndQueue.PushBuffer(Buf, Size) then Exit(-1);
-    if not SendFromQueue then Exit(-1);
-{$ENDIF}
-
-    Result := Size;
-*)
-  finally
-    Unlock;
+  // 在IocpHttpServer的实际测试中发现，当Server发送的块大于4K的时候
+  // 浏览器收到的数据有可能会出现混乱，所以稳妥起见，这里将发送的内
+  // 存块拆分成4K的小块发送
+  while (Size > 0) do
+  begin
+    BlockSize := Min(IoCachePool.BlockSize, Size);
+    if not PostWrite(Buf, BlockSize) then Exit(-2);
+    Inc(PAnsiChar(Buf), BlockSize);
+    Dec(Size, BlockSize);
   end;
 end;
 
@@ -938,22 +891,6 @@ begin
   end;
 end;
 
-function TIocpSocketConnection.SendFromQueue: Boolean;
-var
-  SndBuf: Pointer;
-  SndSize: Integer;
-begin
-  if FSndQueue.PopBuffer(SndBuf, SndSize) and (SndBuf <> nil) then
-  begin
-    Result := PostWrite(SndBuf, SndSize);
-    IoCachePool.FreeMemory(SndBuf);
-  end
-  else
-  // Send中Push之后很有可能马上就被发送线程Pop走了，所以在Send中调用SendFromQueue时
-  // 很有可能队列中已经没有数据了，这种情况应该返回True
-    Result := True;
-end;
-
 function TIocpSocketConnection._TriggerClientRecvData(Buf: Pointer; Len: Integer): Boolean;
 begin
   Result := True;
@@ -962,7 +899,8 @@ end;
 function TIocpSocketConnection._TriggerClientSentData(Buf: Pointer;
   Len: Integer): Boolean;
 begin
-  Result := SendFromQueue;
+  IoCachePool.FreeMemory(Buf);
+  Result := True;
 end;
 
 {$IFDEF __TIME_OUT_TIMER__}
@@ -1063,8 +1001,9 @@ begin
   IncPendingRecv;
 
   PerIoData := Owner.AllocIoData(FSocket, iotRead);
-  PerIoData.Buffer.DataBuf.Buf := @FRcvBuffer[0];
-  PerIoData.Buffer.DataBuf.Len := Length(FRcvBuffer);
+  PerIoData.Buffer.DataBuf.Buf := FRcvBuffer;
+  PerIoData.Buffer.DataBuf.Len := IoCachePool.BlockSize;
+
   Flags := 0;
   Bytes := 0;
   if (WSARecv(PerIoData.ClientSocket, @PerIoData.Buffer.DataBuf, 1, Bytes, Flags, PWSAOverlapped(PerIoData), nil) = SOCKET_ERROR)
@@ -1088,6 +1027,7 @@ var
   PerIoData: PIocpPerIoData;
   Bytes: DWORD;
   LastErr: Integer;
+  SndBuf: Pointer;
 begin
   if IsClosed then Exit(False);
 
@@ -1097,8 +1037,11 @@ begin
 
   IncPendingSend;
 
+  SndBuf := IoCachePool.GetMemory;
+  CopyMemory(SndBuf, Buf, Size);
+
   PerIoData := Owner.AllocIoData(FSocket, iotWrite);
-  PerIoData.Buffer.DataBuf.Buf := Buf;
+  PerIoData.Buffer.DataBuf.Buf := SndBuf;
   PerIoData.Buffer.DataBuf.Len := Size;
 
   // WSAEFAULT(10014)
@@ -1114,16 +1057,11 @@ begin
     Release; // 对应函数开头的 AddRef
     Disconnect; // 对应连接初始化时的 FRefCount := 1
     Owner.FreeIoData(PerIoData);
+    IoCachePool.FreeMemory(SndBuf);
     Exit(False);
   end;
 
   Result := True;
-end;
-
-procedure TIocpSocketConnection.ResetBuffer;
-begin
-  if Assigned(FSndQueue) then
-    FSndQueue.Clear;
 end;
 
 procedure TIocpSocketConnection.UpdateTick;
@@ -2431,12 +2369,12 @@ end;
 
 initialization
   IoCachePool := TIocpMemoryPool.Create(NET_CACHE_SIZE, MAX_FREE_IO_DATA_BLOCKS);
-  IoQueuePool := TIocpMemoryPool.Create(SizeOf(TIocpIoBlock), MAX_FREE_IO_DATA_BLOCKS);
+//  IoQueuePool := TIocpMemoryPool.Create(SizeOf(TIocpIoBlock), MAX_FREE_IO_DATA_BLOCKS);
   FileCachePool := TIocpMemoryPool.Create(FILE_CACHE_SIZE, MAX_FREE_HANDLE_DATA_BLOCKS);
 
 finalization
   IoCachePool.Release;
-  IoQueuePool.Release;
+//  IoQueuePool.Release;
   FileCachePool.Release;
 
 end.
