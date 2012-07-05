@@ -35,11 +35,6 @@ ZY. 2012.04.19
 // 启用超时检测时钟
 {$DEFINE __TIME_OUT_TIMER__}
 
-// 启用逻辑线程池
-// IOCP虽然是严格的先进先出，但是线程的切换却是随机的，所以放入队列的任务不一定
-// 能按顺序执行，这会造成数据混乱，还待改进，暂时不要开启
-//{$DEFINE __LOGIC_THREAD_POOL__}
-
 interface
 
 uses
@@ -274,35 +269,6 @@ type
     property ListenSocket: TSocket read FListenSocket;
   end;
 
-  {
-    *** Iocp逻辑(业务处理)请求对象 ***
-  }
-  TIocpLogicRequest = class(TThreadRequest)
-  private
-    Client: TIocpSocketConnection;
-    Buf: Pointer;
-    Len: Integer;
-  protected
-    procedure Execute(Thread: TProcessorThread); override;
-  public
-    constructor Create(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer);
-    destructor Destroy; override;
-  end;
-
-  {
-    *** Iocp逻辑(业务处理)线程池 ***
-  }
-  TIocpLogicThreadPool = class(TThreadsPool)
-  private
-    IocpTcpSocket: TIocpTcpSocket;
-    ThreadsNumber: Integer;
-  protected
-    procedure DoThreadStart(Thread: TProcessorThread); override;
-    procedure DoThreadExit(Thread: TProcessorThread); override;
-  public
-    constructor Create(IocpTcpSocket: TIocpTcpSocket; ThreadsNumber: Integer); reintroduce;
-  end;
-
   TIocpNotifyEvent = function(Sender: TObject; Client: TIocpSocketConnection): Boolean of object;
   TIocpDataEvent = function(Sender: TObject; Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean of object;
 
@@ -315,12 +281,7 @@ type
     FIoThreadsNumber: Integer;
     FIoThreads: array of TIocpIoThread;
     FIoThreadHandles: array of THandle;
-    {$IFDEF __LOGIC_THREAD_POOL__}
-    FLogicThreadsPool: TIocpLogicThreadPool;
-    FLogicThreadsNumber: Integer;
-    {$ELSE}
     FPendingRequest: Integer;
-    {$ENDIF}
     FConnectionPool: TIocpObjectPool;
     FPerIoDataPool: TIocpMemoryPool;
     FConnectionList, FIdleConnectionList: TIocpSocketConnectionDictionary;
@@ -368,13 +329,12 @@ type
     function _TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean;
     function _TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean;
     function _TriggerClientSentData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean;
-    function GetPendingRequest: Integer;
   protected
     function ProcessMessage: Boolean;
     procedure MessagePump;
 
-    procedure StartupWorkers;
-    procedure ShutdownWorkers;
+    procedure StartupWorkers; virtual;
+    procedure ShutdownWorkers; virtual;
 
     // 重载下面几个方法可以实现在IO事件触发时做相应处理
     // 连接建立时触发
@@ -383,9 +343,7 @@ type
     // 连接断开时触发
     function TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean; virtual;
 
-    // 接收到数据时触发，该事件将在逻辑线程池中执行，
-    // Connection 由引用计数保护，无需担心在逻辑处理过程中会被其它线程释放；
-    // buf是从接受的数据完整复制的，可以安全使用，并且在逻辑线程处理完之后会自动释放
+    // 接收到数据时触发
     function TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean; virtual;
 
     // 发送数据完成时触发
@@ -419,7 +377,7 @@ type
     property IoCacheFreeMemory: Integer read GetIoCacheFreeMemory;
     property SentBytes: Int64 read FSentBytes;
     property RecvBytes: Int64 read FRecvBytes;
-    property PendingRequest: Integer read GetPendingRequest;
+    property PendingRequest: Integer read FPendingRequest;
     {$IFDEF __TIME_OUT_TIMER__}
     property TimerQueue: TIocpTimerQueue read FTimerQueue;
     {$ENDIF}
@@ -1265,67 +1223,6 @@ begin
   SetEvent(FShutdownEvent);
 end;
 
-{ TIocpLogicRequest }
-
-constructor TIocpLogicRequest.Create(Client: TIocpSocketConnection;
-  Buf: Pointer; Len: Integer);
-begin
-  Self.Client := Client;
-
-  if (Buf <> nil) and (Len > 0) then
-  begin
-    //*** 需要改成内存池分配，否则可能会造成内存使用疯涨
-    GetMem(Self.Buf, Len);
-    Self.Len := Len;
-    CopyMemory(Self.Buf, Buf, Len);
-  end;
-end;
-
-destructor TIocpLogicRequest.Destroy;
-begin
-  if (Buf <> nil) then
-    FreeMem(Buf);
-
-  inherited Destroy;
-end;
-
-procedure TIocpLogicRequest.Execute(Thread: TProcessorThread);
-begin
-  try
-    try
-      Client.Owner._TriggerClientRecvData(Client, Buf, Len);
-    finally
-      Client.Release; // 对应 RequestReadComplete 中添加线程池任务时的 AddRef
-    end;
-  except
-    on e: Exception do
-      AppendLog('%s.Execute, %s=%s', [ClassName, e.ClassName, e.Message], ltException);
-  end;
-end;
-
-{ TIocpLogicThreadPool }
-
-constructor TIocpLogicThreadPool.Create(IocpTcpSocket: TIocpTcpSocket;
-  ThreadsNumber: Integer);
-begin
-  inherited Create(ThreadsNumber, True);
-
-  Self.IocpTcpSocket := IocpTcpSocket;
-  Self.ThreadsNumber := ThreadsNumber;
-
-  Startup;
-end;
-
-procedure TIocpLogicThreadPool.DoThreadExit(Thread: TProcessorThread);
-begin
-//  AppendLog('%s.LogicThread %d exit', [IocpTcpSocket.ClassName, Thread.ThreadID]);
-end;
-
-procedure TIocpLogicThreadPool.DoThreadStart(Thread: TProcessorThread);
-begin
-//  AppendLog('%s.LogicThread %d start', [IocpTcpSocket.ClassName, Thread.ThreadID]);
-end;
-
 { TIocpTcpSocket }
 
 constructor TIocpTcpSocket.Create(AOwner: TComponent; IoThreadsNumber: Integer);
@@ -1623,15 +1520,6 @@ begin
   Result := IoCachePool.UsedBlocksSize + FileCachePool.UsedBlocksSize;
 end;
 
-function TIocpTcpSocket.GetPendingRequest: Integer;
-begin
-  {$IFDEF __LOGIC_THREAD_POOL__}
-  Result := FLogicThreadsPool.PendingRequest;
-  {$ELSE}
-  Result := FPendingRequest;
-  {$ENDIF}
-end;
-
 function TIocpTcpSocket.GetPerIoFreeMemory: Integer;
 begin
   Result := FPerIoDataPool.FreeBlocksSize;
@@ -1919,7 +1807,7 @@ begin
 
       if (Connection.IsClosed) then Exit;
 
-      if (PerIoData.BytesTransfered = 0) then
+      if (PerIoData.BytesTransfered = 0) or (PerIoData.Buffer.DataBuf.buf = nil) then
       begin
         Connection.Disconnect;
         Exit;
@@ -1930,17 +1818,12 @@ begin
       // PerIoData.Buffer.DataBuf 就是已接收到的数据，PerIoData.BytesTransfered 是实际接收到的字节数
       PerIoData.Buffer.DataBuf.Len := PerIoData.BytesTransfered;
 
-      {$IFDEF __LOGIC_THREAD_POOL__}
-      if (Connection.AddRef = 1) then Exit;
-      FLogicThreadsPool.AddRequest(TIocpLogicRequest.Create(Connection, PerIoData.Buffer.DataBuf.Buf, PerIoData.Buffer.DataBuf.Len));
-      {$ELSE}
       try
         InterlockedIncrement(FPendingRequest);
         if not _TriggerClientRecvData(Connection, PerIoData.Buffer.DataBuf.buf, PerIoData.Buffer.DataBuf.len) then Exit;
       finally
         InterlockedDecrement(FPendingRequest);
       end;
-      {$ENDIF}
 
       // 继续接收客户端数据
       Connection.PostReadZero;
@@ -1962,7 +1845,7 @@ begin
 
       if (Connection.IsClosed) then Exit;
 
-      if (PerIoData.BytesTransfered = 0) then
+      if (PerIoData.BytesTransfered = 0) or (PerIoData.Buffer.DataBuf.buf = nil) then
       begin
         Connection.Disconnect;
         Exit;
@@ -2007,14 +1890,7 @@ var
 begin
   if (FIocpHandle <> 0) then Exit;
 
-  // 启动逻辑线程池
-  {$IFDEF __LOGIC_THREAD_POOL__}
-  FLogicThreadsNumber := 0;
-  FLogicThreadsPool := TIocpLogicThreadPool.Create(Self, FLogicThreadsNumber);
-  FLogicThreadsPool.Startup;
-  {$ELSE}
   FPendingRequest := 0;
-  {$ENDIF}
 
   // 计算IO线程数
   if (FIoThreadsNumber <= 0) then
@@ -2061,12 +1937,6 @@ begin
   {$IFDEF __TIME_OUT_TIMER__}
   // 释放时钟队列
   FTimerQueue.Release;
-  {$ENDIF}
-
-  // 关闭逻辑线程池
-  {$IFDEF __LOGIC_THREAD_POOL__}
-  FLogicThreadsPool.shutdown;
-  FLogicThreadsPool.Free;
   {$ENDIF}
 
   // 这里必须加上Sleep，以保证所有断开连接的命令比后面退出线程的命令先进入IOCP队列

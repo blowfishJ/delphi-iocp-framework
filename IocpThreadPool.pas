@@ -14,11 +14,11 @@ const
   SHUTDOWN_FLAG = ULONG_PTR(-1);
 
 type
-  TThreadsPool = class;
+  TIocpThreadPool = class;
   TProcessorThread = class;
 
   // 储存请求数据的基本类
-  TThreadRequest = class(TObject)
+  TIocpThreadRequest = class(TObject)
   protected
     // 线程池工作函数
     // 继承这个方法填写自己的线程代码
@@ -28,12 +28,12 @@ type
   // 工作线程
   TProcessorThread = class(TThread)
   private
-    FPool: TThreadsPool;
+    FPool: TIocpThreadPool;
     FTag: Pointer;
   protected
     procedure Execute; override;
   public
-    constructor Create(Pool: TThreadsPool); reintroduce; virtual;
+    constructor Create(Pool: TIocpThreadPool); reintroduce; virtual;
 
     property Tag: Pointer read FTag write FTag;
   end;
@@ -41,7 +41,7 @@ type
   TProcessorThreadArray = array of TProcessorThread;
 
   // 线程池
-  TThreadsPool = class
+  TIocpThreadPool = class
   protected
     FIocpHandle: THandle;
     FNumberOfThreads: Integer;
@@ -59,7 +59,7 @@ type
     constructor Create(NumberOfThreads: Integer = 0; Suspend: Boolean = False);
     destructor Destroy; override;
 
-    function AddRequest(Request: TThreadRequest): Boolean; virtual;
+    function AddRequest(Request: TIocpThreadRequest): Boolean; virtual;
     procedure Startup;
     procedure Shutdown;
 
@@ -69,15 +69,15 @@ type
 
 implementation
 
-{ TThreadRequest }
+{ TIocpThreadRequest }
 
-procedure TThreadRequest.Execute(Thread: TProcessorThread);
+procedure TIocpThreadRequest.Execute(Thread: TProcessorThread);
 begin
 end;
 
 { TProcessorThread }
 
-constructor TProcessorThread.Create(Pool: TThreadsPool);
+constructor TProcessorThread.Create(Pool: TIocpThreadPool);
 begin
   inherited Create(True);
 
@@ -91,7 +91,7 @@ end;
 procedure TProcessorThread.Execute;
 var
   Bytes: DWORD;
-  Request: TThreadRequest;
+  Request: TIocpThreadRequest;
   CompKey: ULONG_PTR;
 begin
   FPool.DoThreadStart(Self);
@@ -115,10 +115,10 @@ begin
   FPool.DoThreadExit(Self);
 end;
 
-{ TThreadsPool }
+{ TIocpThreadPool }
 
 // NumberOfThreads 线程数，如果设定为0，则自动根据CPU核心数计算最佳线程数
-constructor TThreadsPool.Create(NumberOfThreads: Integer; Suspend: Boolean);
+constructor TIocpThreadPool.Create(NumberOfThreads: Integer; Suspend: Boolean);
 begin
   FNumberOfThreads := NumberOfThreads;
   FIocpHandle := 0;
@@ -127,21 +127,21 @@ begin
     Startup;
 end;
 
-destructor TThreadsPool.Destroy;
+destructor TIocpThreadPool.Destroy;
 begin
   Shutdown;
   inherited Destroy;
 end;
 
-procedure TThreadsPool.DoThreadStart(Thread: TProcessorThread);
+procedure TIocpThreadPool.DoThreadStart(Thread: TProcessorThread);
 begin
 end;
 
-procedure TThreadsPool.DoThreadExit(Thread: TProcessorThread);
+procedure TIocpThreadPool.DoThreadExit(Thread: TProcessorThread);
 begin
 end;
 
-function TThreadsPool.AddRequest(Request: TThreadRequest): Boolean;
+function TIocpThreadPool.AddRequest(Request: TIocpThreadRequest): Boolean;
 begin
   Result := False;
   if (FIocpHandle = 0) then Exit;
@@ -152,7 +152,7 @@ begin
     InterlockedDecrement(FPendingRequest);
 end;
 
-procedure TThreadsPool.Startup;
+procedure TIocpThreadPool.Startup;
 var
   NumberOfThreads, i: Integer;
   si: TSystemInfo;
@@ -185,7 +185,7 @@ begin
   end;
 end;
 
-procedure TThreadsPool.Shutdown;
+procedure TIocpThreadPool.Shutdown;
 var
   i: Integer;
 begin
