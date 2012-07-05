@@ -729,6 +729,7 @@ end;
 procedure TIocpHttpRequest.Execute(Thread: TProcessorThread);
 begin
   TIocpHttpServer(Client.Owner).DoOnRequest(Client);
+  Client.Release;
 end;
 
 { TIocpHttpServer }
@@ -887,6 +888,7 @@ begin
   if (Client.FHttpState = hcDone) then
   begin
     {$ifdef __LOGIC_THREAD_POOL__}
+    if (Client.AddRef = 1) then Exit;
     FJobThreadPool.AddRequest(TIocpHttpRequest.Create(Client));
     {$else}
     DoOnRequest(Client);
@@ -905,13 +907,13 @@ end;
 
 procedure TIocpHttpServer.ShutdownWorkers;
 begin
+  inherited ShutdownWorkers;
+
   if Assigned(FJobThreadPool) then
   begin
     FJobThreadPool.Shutdown;
     FreeAndNil(FJobThreadPool);
   end;
-
-  inherited ShutdownWorkers;
 end;
 {$endif}
 

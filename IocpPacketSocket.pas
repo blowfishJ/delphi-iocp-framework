@@ -192,6 +192,7 @@ procedure TIocpPacketRequest.Execute(Thread: TProcessorThread);
 begin
   if (Packet = nil) then Exit;
   TIocpPacketSocket(Client.Owner).TriggerPacketRecv(Client, Packet^);
+  Client.Release;
   if (Packet.Data <> nil) then
     FreeMem(Packet.Data);
   Dispose(Packet);
@@ -218,13 +219,13 @@ end;
 
 procedure TIocpPacketSocket.ShutdownWorkers;
 begin
+  inherited ShutdownWorkers;
+
   if Assigned(FJobThreadPool) then
   begin
     FJobThreadPool.Shutdown;
     FreeAndNil(FJobThreadPool);
   end;
-
-  inherited ShutdownWorkers;
 end;
 {$endif}
 
@@ -279,7 +280,7 @@ begin
           GetMem(FRecvPacket.Data, FRecvPacket.Header.DataSize);
         except
           AppendLog('%s.TriggerClientRecvData 分配内存块失败，大小 = %d字节', [Self.ClassName, FRecvPacket.Header.DataSize], ltWarning);
-          FreeAndNil(FRecvPacket);
+          Dispose(FRecvPacket);
           Client.Disconnect;
           Exit;
         end;
@@ -295,13 +296,18 @@ begin
         if FCrcEnabled and not CheckDataCrc(FRecvPacket^) then
         begin
           TriggerPacketDataCrcError(TIocpPacketConnection(Client), FRecvPacket^);
-          FreeAndNil(FRecvPacket);
+          Dispose(FRecvPacket);
           Client.Disconnect;
           Exit;
         end;
 
         // 一个包正确完整接收后，触发事件
         {$ifdef __LOGIC_THREAD_POOL__}
+        if (Client.AddRef = 1) then
+        begin
+          Dispose(FRecvPacket);
+          Exit;
+        end;
         FJobThreadPool.AddRequest(TIocpPacketRequest.Create(TIocpPacketConnection(Client), FRecvPacket));
         FRecvPacketBytes := 0;
         FRecvPacket := nil;
