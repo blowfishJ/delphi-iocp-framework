@@ -38,11 +38,9 @@ ZY. 2012.04.19
 interface
 
 uses
-  Windows, Messages, Classes, SysUtils, SyncObjs, Math, Contnrs,
-  JwaWinsock2, JwaWS2tcpip, JwaMSWSock, WinsockEx, System.Generics.Collections,
-  IocpApiFix, IocpThreadPool, IocpReadWriteLocker, IocpMemoryPool,
-  IocpObjectPool, IocpBuffer, IocpQueue, IocpTimerQueue, IocpLogger,
-  IocpUtils, DSiWin32;
+  Windows, Messages, Classes, SysUtils, SyncObjs, Math, Contnrs, System.Generics.Collections,
+  IdWinsock2, IdWship6, IocpApiFix, IocpThreadPool, IocpReadWriteLocker, IocpMemoryPool,
+  IocpObjectPool, IocpBuffer, IocpQueue, IocpTimerQueue, IocpLogger, IocpUtils, DSiWin32;
 
 const
   SHUTDOWN_FLAG = ULONG_PTR(-1);
@@ -1362,8 +1360,8 @@ end;
 
 function TIocpTcpSocket.AsyncConnect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer): TSocket;
 var
-  InAddrInfo: TAddrInfo;
-  POutAddrInfo: PAddrInfo;
+  InAddrInfo: TAddrInfoW;
+  POutAddrInfo: PAddrInfoW;
   Addr, tmpAddr: TSockAddr;
   ClientSocket: TSocket;
   Connection: TIocpSocketConnection;
@@ -1380,8 +1378,9 @@ begin
     用getaddrinfo返回的数据不会有问题,而且可以兼顾IPv4和IPv6,只需要简单的修改就能让程序同时支持
     IPv4和IPv6了
   }
-  FillChar(InAddrInfo, SizeOf(TAddrInfo), 0);
-  if (getaddrinfo(PAnsiChar(AnsiString(RemoteAddr)), nil, @InAddrInfo, POutAddrInfo) <> 0) then
+  FillChar(InAddrInfo, SizeOf(TAddrInfoW), 0);
+  POutAddrInfo := nil;
+  if (getaddrinfo(PWideChar(RemoteAddr), nil, @InAddrInfo, @POutAddrInfo) <> 0) then
   begin
     LastErr := WSAGetLastError;
     AppendLog('%s.AsyncConnect getaddrinfo失败, ERR=%d,%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
@@ -1405,7 +1404,7 @@ begin
   if (bind(ClientSocket, @tmpAddr, SizeOf(tmpAddr)) = SOCKET_ERROR) then
   begin
     LastErr := WSAGetLastError;
-    JwaWinsock2.CloseSocket(ClientSocket);
+    IdWinsock2.CloseSocket(ClientSocket);
     AppendLog('%s.AsyncConnect绑定ConnectEx(%d)端口失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
     Exit;
   end;
@@ -1414,7 +1413,7 @@ begin
   Connection := AllocConnection(ClientSocket);
   if not AssociateSocketWithCompletionPort(ClientSocket, Connection) then
   begin
-    JwaWinsock2.CloseSocket(ClientSocket);
+    IdWinsock2.CloseSocket(ClientSocket);
     FConnectionPool.FreeObject(Connection);
     Exit;
   end;
@@ -1533,8 +1532,8 @@ end;
 function TIocpTcpSocket.Listen(const Host: string; Port: Word; InitAcceptNum: Integer): TSocket;
 var
   ListenSocket: TSocket;
-  InAddrInfo: TAddrInfo;
-  POutAddrInfo: PAddrInfo;
+  InAddrInfo: TAddrInfoW;
+  POutAddrInfo: PAddrInfoW;
   ListenAddr: u_long;
   ServerAddr: TSockAddrIn;
   LastErr: Integer;
@@ -1546,8 +1545,8 @@ begin
   ListenAddr := htonl(INADDR_ANY);
   if (Host <> '') then
   begin
-    FillChar(InAddrInfo, SizeOf(TAddrInfo), 0);
-    if (getaddrinfo(PAnsiChar(AnsiString(Host)), nil, @InAddrInfo, POutAddrInfo) = 0) then
+    FillChar(InAddrInfo, SizeOf(TAddrInfoW), 0);
+    if (getaddrinfo(PWideChar(Host), nil, @InAddrInfo, @POutAddrInfo) = 0) then
     begin
       ListenAddr := POutAddrInfo.ai_addr.sin_addr.S_addr;
       freeaddrinfo(POutAddrInfo);
@@ -1563,15 +1562,15 @@ begin
   if (bind(ListenSocket, PSockaddr(@ServerAddr), SizeOf(ServerAddr)) = SOCKET_ERROR) then
   begin
     LastErr := WSAGetLastError;
-    JwaWinsock2.CloseSocket(ListenSocket);
+    IdWinsock2.CloseSocket(ListenSocket);
     AppendLog('%s.绑定监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
     Exit;
   end;
 
-  if (JwaWinsock2.listen(ListenSocket, SOMAXCONN) = SOCKET_ERROR) then
+  if (IdWinsock2.listen(ListenSocket, SOMAXCONN) = SOCKET_ERROR) then
   begin
     LastErr := WSAGetLastError;
-    JwaWinsock2.CloseSocket(ListenSocket);
+    IdWinsock2.CloseSocket(ListenSocket);
     AppendLog('%s.启动监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
     Exit;
   end;
@@ -1579,7 +1578,7 @@ begin
   try
     if not AssociateSocketWithCompletionPort(ListenSocket, nil) then
     begin
-      JwaWinsock2.CloseSocket(ListenSocket);
+      IdWinsock2.CloseSocket(ListenSocket);
       AppendLog('%s.绑定监听端口(%d)到IOCP失败', [ClassName, Port], ltWarning);
       Exit;
     end;
@@ -1663,7 +1662,7 @@ procedure TIocpTcpSocket.RequestAcceptComplete(PerIoData: PIocpPerIoData);
 var
   Connection: TIocpSocketConnection;
   LocalAddrLen, RemoteAddrLen: Integer;
-  PLocalAddr, PRemoteAddr: PSockaddr;
+  LocalAddr, RemoteAddr: TSockaddr;
 begin
   try
     // 将连接放到工作连接列表中
@@ -1716,8 +1715,8 @@ begin
     LocalAddrLen := SizeOf(TSockAddr);
     RemoteAddrLen := SizeOf(TSockAddr);
     GetAcceptExSockaddrs(@PerIoData.Buffer.AcceptExBuffer[0], 0, SizeOf(TSockAddrIn) + 16,
-      SizeOf(TSockAddrIn) + 16, PLocalAddr, LocalAddrLen,
-      PRemoteAddr, RemoteAddrLen);
+      SizeOf(TSockAddrIn) + 16, LocalAddr, LocalAddrLen,
+      RemoteAddr, RemoteAddrLen);
 
     if not Connection.InitSocket then
     begin
@@ -1726,7 +1725,7 @@ begin
     end;
 
     // 解析地址信息
-    Connection.FRemoteAddr := PRemoteAddr^;
+    Connection.FRemoteAddr := RemoteAddr;
     ExtractAddrInfo(Connection.FRemoteAddr, Connection.FRemoteIP, Connection.FRemotePort);
 
     // 超过最大允许连接数，断开
@@ -1879,8 +1878,8 @@ begin
  setsockopt(Socket, SOL_SOCKET, SO_LINGER, PAnsiChar(@lingerStruct), SizeOf(lingerStruct));
 //  CancelIo(Socket);}
 
-  JwaWinsock2.shutdown(Socket, SD_BOTH);
-  JwaWinsock2.CloseSocket(Socket);
+  IdWinsock2.shutdown(Socket, SD_BOTH);
+  IdWinsock2.closesocket(Socket);
 end;
 
 procedure TIocpTcpSocket.StartupWorkers;
@@ -2238,6 +2237,9 @@ begin
 end;
 
 initialization
+  IdWinsock2.InitializeWinSock;
+  IdWship6.InitLibrary;
+
   IoCachePool := TIocpMemoryPool.Create(NET_CACHE_SIZE, MAX_FREE_IO_DATA_BLOCKS);
 //  IoQueuePool := TIocpMemoryPool.Create(SizeOf(TIocpIoBlock), MAX_FREE_IO_DATA_BLOCKS);
   FileCachePool := TIocpMemoryPool.Create(FILE_CACHE_SIZE, MAX_FREE_HANDLE_DATA_BLOCKS);
@@ -2246,6 +2248,8 @@ finalization
   IoCachePool.Release;
 //  IoQueuePool.Release;
   FileCachePool.Release;
+
+  IdWinsock2.UninitializeWinSock;
 
 end.
 

@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, ExtCtrls, StdCtrls, SyncObjs, JwaWinsock2, DsiWin32,
+  Dialogs, ExtCtrls, StdCtrls, SyncObjs, IdWinsock2, DsiWin32,
   IocpTcpSocket, IocpPacketSocket, IocpLogger, IocpUtils, uGlobalVars;
 
 type

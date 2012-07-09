@@ -5,7 +5,7 @@ unit IocpPacketSocket;
 interface
 
 uses
-  Windows, Classes, SysUtils, Math, JwaWinsock2, IocpTcpSocket, IocpThreadPool, IocpLogger;
+  Windows, Classes, SysUtils, Math, IdWinsock2, IocpTcpSocket, IocpThreadPool, IocpLogger;
 
 type
   TIocpHeader = record
