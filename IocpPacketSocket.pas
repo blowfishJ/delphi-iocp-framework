@@ -108,27 +108,17 @@ begin
 end;
 
 function CalcCrc32(const Buf; const BufSize: Integer): LongWord;
-asm
-      or eax, eax              // eax = Buf
-      jz @fin
-      or edx, edx              // edx = BufSize
-      jbe @finz
-      push esi
-      mov esi, eax
-      add esi, edx
-      xor eax, eax
-      xor ecx, ecx
-    @l1:
-      dec esi
-      mov cl, [esi]
-      add eax, ecx
-      dec edx
-      jnz @l1
-      pop esi
-    @fin:
-      ret
-    @finz:
-      xor eax, eax
+var
+  I: Integer;
+  P: PByte;
+begin
+  Result := 0;
+  P := @Buf;
+  for I := 1 to BufSize do
+  begin
+    Inc(Result, P^);
+    Inc(P);
+  end;
 end;
 
 { TIocpPacketConnection }
