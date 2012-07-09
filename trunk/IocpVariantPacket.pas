@@ -1,37 +1,20 @@
 unit IocpVariantPacket;
 
 {*
- * 数据包结构(发送和返回共用这个结构，返回时cmd_len写0)
+ * 数据包结构(发送和返回共用这个结构)
  * [SIZE] 4B
  * [CMD] cmd_len(1B) - cmd_name(string)
  * [PARAM_COUNT] 1B
- * [PARAM1] param_name_len(1B) - param_name(string) - param_type(2B) - param_data_len(4B) - param_data(nB)
+ * [PARAM1] param_name_len(1B) - param_name(string) - param_dim(1B) - param_type(2B) - param_data(nB)
  * [PARAM2] ...
  * [PARAM3] ...
  * [DATA] data_len(4B) - data(nB)
  *}
 
-// todo: 可以在打包和解包函数中增加压缩解压缩算法(除了头部的4字节标识数据包尺寸，其余部分都可以做压缩处理)
-//       增加更多可变类型数据的解析
-
 interface
 
 uses
   Windows, Classes, SysUtils, System.Generics.Collections, Variants, VarUtils;
-
-const
-  {*
-   * 返回值列表
-   *}
-  RT_SUCCESS        = $00;
-  RT_INVALID_PARAM  = $01;
-  RT_CONN_OVERFLOW  = $02;
-  RT_NOT_LOGIN      = $03;
-  RT_PROCESS_FAILED = $04;
-  RT_ERR_USER_PWD   = $05;
-  RT_NO_PERMISSION  = $06;
-  RT_NOT_FOUND      = $07;
-  RT_UNKNOWN_CMD    = $08;
 
 type
   // 使用OleVariant，现在连字符串数组的可变类型都能支持了
