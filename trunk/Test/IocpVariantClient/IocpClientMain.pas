@@ -15,7 +15,7 @@ const
 type
   TTestIocpClient = class(TIocpVariantClient)
   protected
-    procedure DoOnResponse(Client: TIocpVariantClientConnection; Response: TIocpVariantPacket); override;
+    procedure DoOnResponse(Client: TIocpVariantClientConnection; Request, Response: TIocpVariantPacket); override;
   end;
 
   TfmIocpClient = class(TForm)
@@ -209,7 +209,7 @@ end;
 { TTestIocpClient }
 
 procedure TTestIocpClient.DoOnResponse(Client: TIocpVariantClientConnection;
-  Response: TIocpVariantPacket);
+  Request, Response: TIocpVariantPacket);
 begin
   inherited;
 
