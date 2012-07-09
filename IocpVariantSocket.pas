@@ -28,7 +28,7 @@ type
   private
     FBusyEvent: THandle;
     FSendStream: TMemoryStream;
-    FSyncResponse: TIocpVariantPacket;
+    FRequest, FSyncResponse: TIocpVariantPacket;
   protected
     procedure Initialize; override;
     function GetIsIdle: Boolean; override;
@@ -39,7 +39,7 @@ type
     procedure SetBusy(Busy: Boolean);
   end;
 
-  TIocpVariantResponseEvent = procedure(Sender: TObject; Client: TIocpVariantClientConnection; Response: TIocpVariantPacket) of object;
+  TIocpVariantResponseEvent = procedure(Sender: TObject; Client: TIocpVariantClientConnection; Request, Response: TIocpVariantPacket) of object;
 
   TIocpVariantClient = class(TIocpPacketSocket)
   private
@@ -56,7 +56,7 @@ type
   protected
     procedure TriggerPacketRecv(Client: TIocpPacketConnection; const Packet: TIocpPacket); override;
   protected
-    procedure DoOnResponse(Client: TIocpVariantClientConnection; Response: TIocpVariantPacket); virtual;
+    procedure DoOnResponse(Client: TIocpVariantClientConnection; Request, Response: TIocpVariantPacket); virtual;
   public
     constructor Create(AOwner: TComponent); overload; override;
 
@@ -130,12 +130,14 @@ begin
 
   FBusyEvent := CreateEvent(nil, True, True, nil);
   FSendStream := TMemoryStream.Create;
+  FRequest := TIocpVariantPacket.Create;
 end;
 
 destructor TIocpVariantClientConnection.Destroy;
 begin
   CloseHandle(FBusyEvent);
   FSendStream.Free;
+  FRequest.Free;
 
   inherited Destroy;
 end;
@@ -172,10 +174,10 @@ begin
 end;
 
 procedure TIocpVariantClient.DoOnResponse(Client: TIocpVariantClientConnection;
-  Response: TIocpVariantPacket);
+  Request, Response: TIocpVariantPacket);
 begin
   if Assigned(FOnResponse) then
-    FOnResponse(Self, Client, Response);
+    FOnResponse(Self, Client, Request, Response);
 end;
 
 function TIocpVariantClient.GetIdleConnectionAndLock: TIocpVariantClientConnection;
@@ -218,6 +220,7 @@ begin
   with Client do
   begin
     SetBusy(True);
+    FRequest.Assign(Request);
     Request.SaveToStream(FSendStream);
     InterlockedExchangePointer(Pointer(FSyncResponse), Response);
     Result := (Send(FSendStream.Memory, FSendStream.Size) > 0);
@@ -312,7 +315,7 @@ begin
       Response := FSyncResponse;
     try
       Response.LoadFromBuf(Packet.Data, Packet.Header.DataSize);
-      DoOnResponse(TIocpVariantClientConnection(Client), Response);
+      DoOnResponse(TIocpVariantClientConnection(Client), TIocpVariantClientConnection(Client).FRequest, Response);
     finally
       SetBusy(False);
       if NeedNewResponse then
