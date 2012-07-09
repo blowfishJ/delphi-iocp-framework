@@ -3,7 +3,7 @@ unit IocpHttpTunnel;
 interface
 
 uses
-  Windows, Messages, Classes, SysUtils, SyncObjs, StrUtils, System.Generics.Collections, JwaWinsock2,
+  Windows, Messages, Classes, SysUtils, SyncObjs, StrUtils, System.Generics.Collections, IdWinsock2,
   IoUtils, IocpTcpSocket, IocpHttpServer, IocpBuffer, IocpHttpUtils, IocpLogger, uGlobalVars;
 
 type

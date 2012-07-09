@@ -3,7 +3,7 @@ unit IocpVariantSocket;
 interface
 
 uses
-  Windows, Classes, SysUtils, Math, JwaWinsock2, IocpTcpSocket, IocpPacketSocket, IocpVariantPacket,
+  Windows, Classes, SysUtils, Math, IdWinsock2, IocpTcpSocket, IocpPacketSocket, IocpVariantPacket,
   IocpUtils;
 
 type
