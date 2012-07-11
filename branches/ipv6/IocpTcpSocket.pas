@@ -35,8 +35,6 @@ ZY. 2012.04.19
 // 启用超时检测时钟
 {$define __TIME_OUT_TIMER__}
 
-{$define __IPv6__}
-
 interface
 
 uses
@@ -52,60 +50,49 @@ const
   INIT_ACCEPTEX_NUM = 1;
   NET_CACHE_SIZE = 4 * 1024; // 不要大于4K !!!!!
   FILE_CACHE_SIZE = 64 * 1024;
-  {$ifdef __IPv6__}
-  ADDR_SIZE = SizeOf(TSockAddrIn6) + 16;
-  {$else}
-  ADDR_SIZE = SizeOf(TSockAddrIn) + 16;
-  {$endif}
 
 type
-  EIocpTcpException = class(Exception);
+  TAddrUnion = record
+    case Integer of
+      0: (IPv4: TSockAddrIn);
+      // 这个Buffer只用于AcceptEx保存终端地址数据，大小为2倍地址结构
+      1: (IPv6: TSockAddrIn6);
+  end;
 
-  TSimpleIocpTcpServer = class;
-  TIocpTcpSocket = class;
-  TIocpSocketConnection = class;
+  TAddrBuffer = record
+    Addr: TAddrUnion;
+    Extra: array [0..15] of Byte;
+  end;
+
+  TAcceptExBuffer = array[0..SizeOf(TAddrBuffer) * 2 - 1] of Byte;
+
+  TPerIoBufUnion = record
+    case Integer of
+      0: (DataBuf: WSABUF);
+      // 这个Buffer只用于AcceptEx保存终端地址数据，大小为2倍地址结构
+      1: (AcceptExBuffer: TAcceptExBuffer);
+  end;
 
   TIocpOperationType = (iotReadZero, iotRead, iotWrite, iotAccept, iotConnect);
 
   {
-    *** 发送队列数据块结构 ***
-    用于保存被拆分后的内存块
+    *** 单IO数据结构
+    每次IO操作都需要生成一个该结构传递给IOCP
   }
-  {PIocpIoBlock = ^TIocpIoBlock;
-  TIocpIoBlock = record
-    Buf: Pointer;
-    Size: Integer;
-  end;}
+  PIocpPerIoData = ^TIocpPerIoData;
+  TIocpPerIoData = record
+    Overlapped: TWSAOverlapped;
+    Buffer: TPerIoBufUnion;
+    Operation: TIocpOperationType;
+    ListenSocket, ClientSocket: TSocket;
 
-  {
-    *** 发送队列 ***
-    将待发送内存块根据内存缓冲池块大小拆分后,保存到队列中
-  }
-(*  TIocpSendQueue = class
-  private
-    FLocker: TCriticalSection;
-    FIocpQueue: TIocpPointerQueue;
-    FOwner: TIocpSocketConnection;
+    BytesTransfered: Cardinal;
+  end;
 
-    function GetCount: Integer;
-    function UnsafePushBuffer(Buf: Pointer; Size: Integer): Boolean;
-    function UnsafePopBuffer(out Buf: Pointer; out Size: Integer): Boolean;
-  protected
-    function Push(p: Pointer): Boolean; virtual;
-    function Pop(out p: Pointer): Boolean; virtual;
-  public
-    constructor Create(Owner: TIocpSocketConnection); virtual;
-    destructor Destroy; override;
+  EIocpTcpException = class(Exception);
 
-    procedure Lock;
-    procedure Unlock;
-
-    function PushBuffer(Buf: Pointer; Size: Integer): Boolean;
-    function PopBuffer(out Buf: Pointer; out Size: Integer): Boolean;
-    procedure Clear;
-
-    property Count: Integer read GetCount;
-  end; *)
+  TIocpTcpSocket = class;
+  TIocpSocketConnection = class;
 
   {
      *** Socket 连接 ***
@@ -113,11 +100,6 @@ type
   TIocpSocketConnection = class(TIocpObject)
   private
     FSocket: TSocket;
-    {$ifdef __IPv6__}
-//    FRemoteAddr: TSockAddrIn6;
-    {$else}
-//    FRemoteAddr: TSockAddrIn;
-    {$endif}
     FRemoteIP: string;
     FRemotePort: Word;
 
@@ -133,6 +115,7 @@ type
     FTimer: TIocpTimerQueueTimer;
     FTimeout: DWORD;
     FLife: DWORD;
+    FIsIPv6: Boolean;
     // 连接超时检查
     procedure OnTimerExecute(Sender: TObject);
     procedure OnTimerCancel(Sender: TObject);
@@ -197,6 +180,7 @@ type
     property RcvBufSize: Integer read FRcvBufSize;
     property PendingSend: Integer read FPendingSend;
     property PendingRecv: Integer read FPendingRecv;
+    property IsIPv6: Boolean read FIsIPv6;
     {$IFDEF __TIME_OUT_TIMER__}
     property Timeout: DWORD read FTimeout write FTimeout;
     property Life: DWORD read FLife write FLife;
@@ -205,29 +189,6 @@ type
   end;
 
   TIocpSocketConnectionClass = class of TIocpSocketConnection;
-
-  TAcceptExBuffer = array[0..ADDR_SIZE * 2 - 1] of Byte;
-
-  TPerIoBufUnion = record
-    case Integer of
-      0: (DataBuf: WSABUF);
-      // 这个Buffer只用于AcceptEx保存终端地址数据，大小为2倍地址结构
-      1: (AcceptExBuffer: TAcceptExBuffer);
-  end;
-
-  {
-    *** 单IO数据结构
-    每次IO操作都需要生成一个该结构传递给IOCP
-  }
-  PIocpPerIoData = ^TIocpPerIoData;
-  TIocpPerIoData = record
-    Overlapped: TWSAOverlapped;
-    Buffer: TPerIoBufUnion;
-    Operation: TIocpOperationType;
-    ListenSocket, ClientSocket: TSocket;
-
-    BytesTransfered: Cardinal;
-  end;
 
   {
     *** Socket连接列表 ***
@@ -313,8 +274,7 @@ type
     FOnClientDisconnected: TIocpNotifyEvent;
 
     procedure ProcessRequest(Connection: TIocpSocketConnection; PerIoData: PIocpPerIoData; IoThread: TIocpIoThread); virtual;
-    procedure ExtractAddrInfo(const Addr: TSockAddrIn; out IP: string; out Port: Word); overload;
-    procedure ExtractAddrInfo(const Addr: TSockAddrIn6; out IP: string; out Port: Word); overload;
+    procedure ExtractAddrInfo(const Addr: PSockAddr; AddrLen: Integer; out IP: string; out Port: Word);
     function GetConnectionFreeMemory: Integer;
     function GetConnectionUsedMemory: Integer;
     function GetPerIoFreeMemory: Integer;
@@ -368,8 +328,8 @@ type
     constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); reintroduce; overload;
     destructor Destroy; override;
 
-    function Listen(const Host: string; Port: Word; InitAcceptNum: Integer): TSocket; overload;
-    function Listen(Port: Word; InitAcceptNum: Integer): TSocket; overload;
+    function Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Boolean; overload;
+    function Listen(Port: Word; InitAcceptNum: Integer): Boolean; overload;
     procedure StopListen(ListenSocket: TSocket);
     procedure CloseSocket(Socket: TSocket);
     function AsyncConnect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer = nil): TSocket;
@@ -447,7 +407,7 @@ type
   private
     FAddr: string;
     FPort: Word;
-    FListenSocket: TSocket;
+    FListened: Boolean;
   public
     constructor Create(AOwner: TComponent); override;
 
@@ -474,7 +434,7 @@ type
   private
     FAddr: string;
     FPort: Word;
-    FListenSocket: TSocket;
+    FListened: Boolean;
     FInitAcceptNum: Integer;
     FStartTick: DWORD;
   public
@@ -501,126 +461,7 @@ begin
 end;
 
 var
-  IoCachePool, {IoQueuePool, }FileCachePool: TIocpMemoryPool;
-
-{ TIocpSendQueue }
-(*
-procedure TIocpSendQueue.Clear;
-var
-  Buf: Pointer;
-  Size: Integer;
-begin
-  try
-    Lock;
-    while UnsafePopBuffer(Buf, Size) do
-      IoCachePool.FreeMemory(Buf);
-  finally
-    Unlock;
-  end;
-end;
-
-constructor TIocpSendQueue.Create(Owner: TIocpSocketConnection);
-begin
-  FLocker := TCriticalSection.Create;
-  FIocpQueue := TIocpPointerQueue.Create;
-  FOwner := Owner;
-end;
-
-destructor TIocpSendQueue.Destroy;
-begin
-  Clear;
-  FIocpQueue.Free;
-  FLocker.Free;
-
-  inherited Destroy;
-end;
-
-function TIocpSendQueue.GetCount: Integer;
-begin
-  Result := FIocpQueue.Count;
-end;
-
-procedure TIocpSendQueue.Lock;
-begin
-  FLocker.Enter;
-end;
-
-function TIocpSendQueue.Pop(out p: Pointer): Boolean;
-begin
-  Result := FIocpQueue.Pop(p);
-end;
-
-function TIocpSendQueue.PopBuffer(out Buf: Pointer; out Size: Integer): Boolean;
-begin
-  try
-    Lock;
-    Result := UnsafePopBuffer(Buf, Size);
-  finally
-    Unlock;
-  end;
-end;
-
-function TIocpSendQueue.Push(p: Pointer): Boolean;
-begin
-  Result := FIocpQueue.Push(p);
-end;
-
-function TIocpSendQueue.PushBuffer(Buf: Pointer; Size: Integer): Boolean;
-begin
-  try
-    Lock;
-    Result := UnsafePushBuffer(Buf, Size);
-  finally
-    Unlock;
-  end;
-end;
-
-procedure TIocpSendQueue.Unlock;
-begin
-  FLocker.Leave;
-end;
-
-function TIocpSendQueue.UnsafePushBuffer(Buf: Pointer; Size: Integer): Boolean;
-var
-  BlockSize: Integer;
-  PBlock: PIocpIoBlock;
-begin
-  if (Buf = nil) or (Size <= 0) then Exit(False);
-
-  while (Size > 0) do
-  begin
-    BlockSize := Min(Size, IoCachePool.BlockSize);
-    PBlock := IoQueuePool.GetMemory;
-    PBlock.Buf := IoCachePool.GetMemory;
-    Move(Buf^, PBlock.Buf^, BlockSize);
-    PBlock.Size := BlockSize;
-    if not Push(PBlock) then Exit(False);
-
-    Dec(Size, BlockSize);
-    Inc(PByte(Buf), BlockSize);
-  end;
-  Result := True;
-end;
-
-function TIocpSendQueue.UnsafePopBuffer(out Buf: Pointer;
-  out Size: Integer): Boolean;
-var
-  PBlock: PIocpIoBlock;
-begin
-  if Pop(Pointer(PBlock)) then
-  begin
-    Buf := PBlock.Buf;
-    Size := PBlock.Size;
-    IoQueuePool.FreeMemory(Pointer(PBlock));
-    Result := (Buf <> nil);
-  end
-  else
-  begin
-    Buf := nil;
-    Size := -1;
-    Result := False;
-  end;
-end; *)
+  IoCachePool, FileCachePool: TIocpMemoryPool;
 
 { TIocpSocketConnection }
 
@@ -1302,6 +1143,7 @@ begin
 
   // 生成新的连接对象
   Connection := AllocConnection(ClientSocket);
+  Connection.FIsIPv6 := (AiFamily = AF_INET6);
 
   // 将连接放到空闲连接列表中
   // 在ShutdownWorks中才能完整释放Socket资源，否则会造成Socket句柄泄露
@@ -1314,8 +1156,8 @@ begin
 
   PerIoData := AllocIoData(ClientSocket, iotAccept);
   PerIoData.ListenSocket := ListenSocket;
-  if (not AcceptEx(ListenSocket, ClientSocket, @PerIoData.Buffer.AcceptExBuffer[0], 0,
-    ADDR_SIZE, ADDR_SIZE, Bytes, POverlapped(PerIoData))) then
+  if (not AcceptEx(ListenSocket, ClientSocket, @PerIoData.Buffer.AcceptExBuffer, 0,
+    SizeOf(TAddrBuffer), SizeOf(TAddrBuffer), Bytes, POverlapped(PerIoData))) then
   begin
     LastErr := WSAGetLastError;
     if (LastErr <> WSA_IO_PENDING) then
@@ -1374,7 +1216,6 @@ begin
   end;
 end;
 
-{$ifdef __IPv6__}
 function TIocpTcpSocket.AsyncConnect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer): TSocket;
 var
   InAddrInfo: TAddrInfoW;
@@ -1389,7 +1230,6 @@ var
   LastErr: Integer;
 begin
   Result := INVALID_SOCKET;
-
   // 超过最大允许连接数
   if (FMaxClients > 0) and (FConnectionList.Count >= FMaxClients) then Exit;
 
@@ -1451,11 +1291,9 @@ begin
 
     if (Connection.AddRef = 1) then Exit;
 
+    Connection.FIsIPv6 := (POutAddrInfo.ai_family = AF_INET6);
     Connection.Tag := Tag;
-    if (POutAddrInfo.ai_family = AF_INET6) then
-      ExtractAddrInfo(PSockAddrIn6(POutAddrInfo.ai_addr)^, Connection.FRemoteIP, Connection.FRemotePort)
-    else
-      ExtractAddrInfo(PSockAddrIn(POutAddrInfo.ai_addr)^, Connection.FRemoteIP, Connection.FRemotePort);
+    ExtractAddrInfo(POutAddrInfo.ai_addr, POutAddrInfo.ai_addrlen, Connection.FRemoteIP, Connection.FRemotePort);
     PerIoData := AllocIoData(ClientSocket, iotConnect);
     if not ConnectEx(ClientSocket, POutAddrInfo.ai_addr, POutAddrInfo.ai_addrlen, nil, 0, PCardinal(0)^, PWSAOverlapped(PerIoData)) and
       (WSAGetLastError <> WSA_IO_PENDING) then
@@ -1472,92 +1310,6 @@ begin
   end;
   Result := ClientSocket;
 end;
-{$else}
-function TIocpTcpSocket.AsyncConnect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer): TSocket;
-var
-  InAddrInfo: TAddrInfoW;
-  POutAddrInfo: PAddrInfoW;
-  Addr, tmpAddr: TSockAddr;
-  ClientSocket: TSocket;
-  Connection: TIocpSocketConnection;
-  PerIoData: PIocpPerIoData;
-  LastErr: Integer;
-begin
-  Result := INVALID_SOCKET;
-
-  // 超过最大允许连接数
-  if (FMaxClients > 0) and (FConnectionList.Count >= FMaxClients) then Exit;
-
-  {
-    64位程序中gethostbyname返回的数据结构的h_addr_list指针无效(貌似高4字节和低4字节顺序颠倒了)
-    用getaddrinfo返回的数据不会有问题,而且可以兼顾IPv4和IPv6,只需要简单的修改就能让程序同时支持
-    IPv4和IPv6了
-  }
-  FillChar(InAddrInfo, SizeOf(TAddrInfoW), 0);
-  InAddrInfo.ai_family := AF_UNSPEC;
-  InAddrInfo.ai_socktype := SOCK_STREAM;
-  POutAddrInfo := nil;
-  if (getaddrinfo(PWideChar(RemoteAddr), nil, @InAddrInfo, @POutAddrInfo) <> 0) then
-  begin
-    LastErr := WSAGetLastError;
-    AppendLog('%s.AsyncConnect getaddrinfo失败, ERR=%d,%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
-    Exit;
-  end;
-
-  try
-    ZeroMemory(@Addr, SizeOf(TSockAddr));
-  //  Addr.sin_family := AF_INET;
-    Addr.sin_family := POutAddrInfo.ai_family;
-    Addr.sin_addr.S_addr := POutAddrInfo.ai_addr.sin_addr.S_addr;
-    Addr.sin_port := htons(RemotePort);
-
-    ClientSocket := WSASocket(POutAddrInfo.ai_family, POutAddrInfo.ai_socktype,
-      POutAddrInfo.ai_protocol, nil, 0, WSA_FLAG_OVERLAPPED);
-    if (ClientSocket = INVALID_SOCKET) then Exit;
-
-    ZeroMemory(@tmpAddr, SizeOf(tmpAddr));
-    tmpAddr.sin_family := AF_INET;
-    tmpAddr.sin_addr.S_addr := INADDR_ANY;
-    tmpAddr.sin_port := 0;
-    if (bind(ClientSocket, @tmpAddr, SizeOf(tmpAddr)) = SOCKET_ERROR) then
-    begin
-      LastErr := WSAGetLastError;
-      IdWinsock2.CloseSocket(ClientSocket);
-      AppendLog('%s.AsyncConnect绑定ConnectEx(%d)端口失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
-      Exit;
-    end;
-
-    // 生成新的连接对象并绑定到IOCP
-    Connection := AllocConnection(ClientSocket);
-    if not AssociateSocketWithCompletionPort(ClientSocket, Connection) then
-    begin
-      IdWinsock2.CloseSocket(ClientSocket);
-      FConnectionPool.FreeObject(Connection);
-      Exit;
-    end;
-
-    if (Connection.AddRef = 1) then Exit;
-
-    Connection.Tag := Tag;
-    ExtractAddrInfo(PSockAddrIn(POutAddrInfo.ai_addr)^, Connection.FRemoteIP, Connection.FRemotePort);
-    PerIoData := AllocIoData(ClientSocket, iotConnect);
-    if not ConnectEx(ClientSocket, POutAddrInfo.ai_addr, POutAddrInfo.ai_addrlen, nil, 0, PCardinal(0)^, PWSAOverlapped(PerIoData)) and
-      (WSAGetLastError <> WSA_IO_PENDING) then
-    begin
-      LastErr := WSAGetLastError;
-      AppendLog('%s.AsyncConnect.ConnectEx(%d)失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
-      FreeIoData(PerIoData);
-      Connection.Release;
-      Connection.Disconnect;
-      Exit;
-    end;
-  finally
-    freeaddrinfo(POutAddrInfo);
-  end;
-
-  Result := ClientSocket;
-end;
-{$endif}
 
 function TIocpTcpSocket.Connect(const RemoteAddr: string;
   RemotePort: Word; Tag: Pointer; ConnectTimeout: DWORD): TIocpSocketConnection;
@@ -1591,23 +1343,16 @@ begin
   end;
 end;
 
-procedure TIocpTcpSocket.ExtractAddrInfo(const Addr: TSockAddrIn;
-  out IP: string; out Port: Word);
+procedure TIocpTcpSocket.ExtractAddrInfo(const Addr: PSockAddr; AddrLen: Integer; out IP: string; out Port: Word);
+var
+  ServInfo: string;
 begin
-//  IP := string(inet_ntoa(Addr.sin_addr));
-  SetLength(IP, 128);
-  inet_ntop(AF_INET, @Addr.sin_addr, PWideChar(IP), Length(IP));
+  SetLength(IP, NI_MAXHOST);
+  SetLength(ServInfo, NI_MAXSERV);
+  getnameinfo(Addr, AddrLen, PWideChar(IP), NI_MAXHOST, PWideChar(ServInfo), NI_MAXSERV, NI_NUMERICHOST or NI_NUMERICSERV);
   SetLength(IP, StrLen(PWideChar(IP)));
-  Port := ntohs(Addr.sin_port);
-end;
-
-procedure TIocpTcpSocket.ExtractAddrInfo(const Addr: TSockAddrIn6;
-  out IP: string; out Port: Word);
-begin
-  SetLength(IP, 128);
-  inet_ntop(AF_INET6, @Addr.sin6_addr, PWideChar(IP), Length(IP));
-  SetLength(IP, StrLen(PWideChar(IP)));
-  Port := ntohs(Addr.sin6_port);
+  SetLength(ServInfo, StrLen(PWideChar(ServInfo)));
+  Port := StrToInt(ServInfo);
 end;
 
 procedure TIocpTcpSocket.FreeConnection(Connection: TIocpSocketConnection);
@@ -1662,158 +1407,92 @@ begin
   Result := FPerIoDataPool.UsedBlocksSize;
 end;
 
-{$ifdef __IPv6__}
-function TIocpTcpSocket.Listen(const Host: string; Port: Word; InitAcceptNum: Integer): TSocket;
+function TIocpTcpSocket.Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Boolean;
 const
   IPV6_V6ONLY = 27;
 var
+  PHost: PWideChar;
   ListenSocket: TSocket;
   InAddrInfo: TAddrInfoW;
   POutAddrInfo, Ptr: PAddrInfoW;
-  ListenAddr: TIn6Addr;
-  ServerAddr: TSockAddrIn6;
   LastErr: Integer;
-  no: Integer;
 begin
-  Result := INVALID_SOCKET;
-
-  // 如果传递了一个有效地址则监听该地址
-  // 否则监听所有本地地址
-  FillChar(InAddrInfo, SizeOf(TAddrInfoW), 0);
-  InAddrInfo.ai_flags := AI_PASSIVE;
-  InAddrInfo.ai_family := AF_UNSPEC;
-  InAddrInfo.ai_socktype := SOCK_STREAM;
-  InAddrInfo.ai_protocol := IPPROTO_TCP;
-  if (getaddrinfo(PWideChar(Host), nil, @InAddrInfo, @POutAddrInfo) <> 0) then
-  begin
-    LastErr := WSAGetLastError;
-    AppendLog('%s.getaddrinfo失败, ERR=%d,%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
-    Exit;
-  end;
+  Result := False;
 
   try
-    Ptr := POutAddrInfo;
-    ListenSocket := WSASocket(AF_INET6, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
-    if (ListenSocket = INVALID_SOCKET) then Exit;
+    // 如果传递了一个有效地址则监听该地址
+    // 否则监听所有本地地址
+    if (Host = '') then
+      PHost := nil
+    else
+      PHost := PWideChar(Host);
 
-    no := 0;
-    setsockopt(ListenSocket, IPPROTO_IPV6, IPV6_V6ONLY, PAnsiChar(@no), sizeof(no));
-
-    ZeroMemory(@ServerAddr, SizeOf(ServerAddr));
-    ServerAddr.sin6_family := AF_INET6;
-    ServerAddr.sin6_addr := ListenAddr;
-    ServerAddr.sin6_port := htons(Port);
-    if (bind(ListenSocket, PSockaddr(@ServerAddr), SizeOf(ServerAddr)) = SOCKET_ERROR) then
-    begin
-      LastErr := WSAGetLastError;
-      IdWinsock2.CloseSocket(ListenSocket);
-      AppendLog('%s.绑定监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
-      Exit;
-    end;
-
-    if (IdWinsock2.listen(ListenSocket, SOMAXCONN) = SOCKET_ERROR) then
-    begin
-      LastErr := WSAGetLastError;
-      IdWinsock2.CloseSocket(ListenSocket);
-      AppendLog('%s.启动监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
-      Exit;
-    end;
-
-    try
-      if not AssociateSocketWithCompletionPort(ListenSocket, nil) then
-      begin
-        IdWinsock2.CloseSocket(ListenSocket);
-        AppendLog('%s.绑定监听端口(%d)到IOCP失败', [ClassName, Port], ltWarning);
-        Exit;
-      end;
-
-      try
-        FListenThreadsLocker.Enter;
-        FListenThreads.Add(TIocpAcceptThread.Create(Self, ListenSocket, InitAcceptNum));
-      finally
-        FListenThreadsLocker.Leave;
-      end;
-    finally
-      freeaddrinfo(POutAddrInfo);
-    end;
-
-    Result := ListenSocket;
-  except
-    on e: Exception do
-      AppendLog('%s.Listen ERROR %s=%s', [ClassName, e.ClassName, e.Message], ltException);
-  end;
-end;
-{$else}
-function TIocpTcpSocket.Listen(const Host: string; Port: Word; InitAcceptNum: Integer): TSocket;
-var
-  ListenSocket: TSocket;
-  InAddrInfo: TAddrInfoW;
-  POutAddrInfo: PAddrInfoW;
-  ListenAddr: u_long;
-  ServerAddr: TSockAddrIn;
-  LastErr: Integer;
-begin
-  Result := INVALID_SOCKET;
-
-  // 如果传递了一个有效地址则监听该地址
-  // 否则监听所有本地地址
-  ListenAddr := htonl(INADDR_ANY);
-  if (Host <> '') then
-  begin
     FillChar(InAddrInfo, SizeOf(TAddrInfoW), 0);
-    if (getaddrinfo(PWideChar(Host), nil, @InAddrInfo, @POutAddrInfo) = 0) then
+    InAddrInfo.ai_flags := AI_PASSIVE;
+    InAddrInfo.ai_family := AF_UNSPEC;
+    InAddrInfo.ai_socktype := SOCK_STREAM;
+    InAddrInfo.ai_protocol := IPPROTO_TCP;
+    if (getaddrinfo(PHost, PWideChar(IntToStr(Port)), @InAddrInfo, @POutAddrInfo) <> 0) then
     begin
-      ListenAddr := POutAddrInfo.ai_addr.sin_addr.S_addr;
-      freeaddrinfo(POutAddrInfo);
-    end;
-  end;
-
-  ListenSocket := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
-  if (ListenSocket = INVALID_SOCKET) then Exit;
-
-  ServerAddr.sin_family := AF_INET;
-  ServerAddr.sin_addr.S_addr := ListenAddr;
-  ServerAddr.sin_port := htons(Port);
-  if (bind(ListenSocket, PSockaddr(@ServerAddr), SizeOf(ServerAddr)) = SOCKET_ERROR) then
-  begin
-    LastErr := WSAGetLastError;
-    IdWinsock2.CloseSocket(ListenSocket);
-    AppendLog('%s.绑定监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
-    Exit;
-  end;
-
-  if (IdWinsock2.listen(ListenSocket, SOMAXCONN) = SOCKET_ERROR) then
-  begin
-    LastErr := WSAGetLastError;
-    IdWinsock2.CloseSocket(ListenSocket);
-    AppendLog('%s.启动监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
-    Exit;
-  end;
-
-  try
-    if not AssociateSocketWithCompletionPort(ListenSocket, nil) then
-    begin
-      IdWinsock2.CloseSocket(ListenSocket);
-      AppendLog('%s.绑定监听端口(%d)到IOCP失败', [ClassName, Port], ltWarning);
+      LastErr := WSAGetLastError;
+      AppendLog('%s.getaddrinfo失败, ERR=%d,%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
       Exit;
     end;
 
     try
-      FListenThreadsLocker.Enter;
-      FListenThreads.Add(TIocpAcceptThread.Create(Self, ListenSocket, InitAcceptNum));
+      Ptr := POutAddrInfo;
+      while (Ptr <> nil) do
+      begin
+        ListenSocket := WSASocket(Ptr.ai_family, Ptr.ai_socktype, Ptr.ai_protocol, nil, 0, WSA_FLAG_OVERLAPPED);
+        if (ListenSocket = INVALID_SOCKET) then Exit;
+
+//        no := 0;
+//        setsockopt(ListenSocket, IPPROTO_IPV6, IPV6_V6ONLY, PAnsiChar(@no), sizeof(no));
+
+        if (bind(ListenSocket, Ptr.ai_addr, Ptr.ai_addrlen) = SOCKET_ERROR) then
+        begin
+          LastErr := WSAGetLastError;
+          IdWinsock2.CloseSocket(ListenSocket);
+          AppendLog('%s.绑定监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
+          Exit;
+        end;
+
+        if (IdWinsock2.listen(ListenSocket, SOMAXCONN) = SOCKET_ERROR) then
+        begin
+          LastErr := WSAGetLastError;
+          IdWinsock2.CloseSocket(ListenSocket);
+          AppendLog('%s.启动监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
+          Exit;
+        end;
+
+        if not AssociateSocketWithCompletionPort(ListenSocket, nil) then
+        begin
+          IdWinsock2.CloseSocket(ListenSocket);
+          AppendLog('%s.绑定监听端口(%d)到IOCP失败', [ClassName, Port], ltWarning);
+          Exit;
+        end;
+
+        try
+          FListenThreadsLocker.Enter;
+          FListenThreads.Add(TIocpAcceptThread.Create(Self, ListenSocket, Ptr.ai_family, InitAcceptNum));
+        finally
+          FListenThreadsLocker.Leave;
+        end;
+
+        Ptr := Ptr.ai_next;
+      end;
     finally
-      FListenThreadsLocker.Leave;
+      freeaddrinfo(POutAddrInfo);
     end;
 
-    Result := ListenSocket;
+    Result := True;
   except
     on e: Exception do
       AppendLog('%s.Listen ERROR %s=%s', [ClassName, e.ClassName, e.Message], ltException);
   end;
 end;
-{$endif}
 
-function TIocpTcpSocket.Listen(Port: Word; InitAcceptNum: Integer): TSocket;
+function TIocpTcpSocket.Listen(Port: Word; InitAcceptNum: Integer): Boolean;
 begin
   Result := Listen('', Port, InitAcceptNum);
 end;
@@ -1878,7 +1557,7 @@ procedure TIocpTcpSocket.RequestAcceptComplete(PerIoData: PIocpPerIoData);
 var
   Connection: TIocpSocketConnection;
   LocalAddrLen, RemoteAddrLen: Integer;
-  LocalAddr, RemoteAddr: PSockAddr;
+  PLocalAddr, PRemoteAddr: PSockAddr;
 begin
   try
     // 将连接放到工作连接列表中
@@ -1919,7 +1598,6 @@ begin
     // 的话会报错：10014,系统检测到在一个调用中尝试使用指针参数时的无效指针地址。
     // 也就是说这里的optlen实际上应该传递的是一个指针的长度(应该跟内存对齐有关系)
     if (setsockopt(PerIoData.ClientSocket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
-//      PAnsiChar(@(PerIoData.ListenSocket)), SizeOf(PerIoData.ListenSocket)) = SOCKET_ERROR) then
       PAnsiChar(@PerIoData.ListenSocket), SizeOf(PAnsiChar)) = SOCKET_ERROR) then
     begin
       AppendLog('%s.RequestAcceptComplete.setsockopt.SO_UPDATE_ACCEPT_CONTEXT ERROR %d=%s', [ClassName, WSAGetLastError, SysErrorMessage(WSAGetLastError)], ltWarning);
@@ -1928,14 +1606,9 @@ begin
     end;
 
     // 获取连接地址信息
-    //LocalAddrLen := SizeOf(LocalAddr);
-    //RemoteAddrLen := SizeOf(RemoteAddr);
-//    GetAcceptExSockaddrs(@PerIoData.Buffer.AcceptExBuffer[0], 0, ADDR_SIZE,
-//      ADDR_SIZE, PSockAddrIn(@LocalAddr)^, LocalAddrLen,
-//      PSockAddrIn(@RemoteAddr)^, RemoteAddrLen);
-    GetAcceptExSockaddrs(@PerIoData.Buffer.AcceptExBuffer[0], 0, ADDR_SIZE,
-      ADDR_SIZE, LocalAddr, LocalAddrLen,
-      RemoteAddr, RemoteAddrLen);
+    GetAcceptExSockaddrs(@PerIoData.Buffer.AcceptExBuffer[0], 0, SizeOf(TAddrBuffer),
+      SizeOf(TAddrBuffer), PLocalAddr, LocalAddrLen,
+      PRemoteAddr, RemoteAddrLen);
 
     if not Connection.InitSocket then
     begin
@@ -1944,15 +1617,7 @@ begin
     end;
 
     // 解析地址信息
-//    Connection.FRemoteAddr := RemoteAddr;
-//    ExtractAddrInfo(Connection.FRemoteAddr, Connection.FRemoteIP, Connection.FRemotePort);
-// 增加IPv6支持之后，这里解析客户端的IP地址信息有问题
-// 应该跟AcceptEx以及上面的GetAcceptExSockaddrs都有关系，待解决...
-    {$ifdef __IPv6__}
-    ExtractAddrInfo(PSockAddrIn6(RemoteAddr)^, Connection.FRemoteIP, Connection.FRemotePort);
-    {$else}
-    ExtractAddrInfo(PSockAddrIn(RemoteAddr)^, Connection.FRemoteIP, Connection.FRemotePort);
-    {$endif}
+    ExtractAddrInfo(PRemoteAddr, RemoteAddrLen, Connection.FRemoteIP, Connection.FRemotePort);
 
     // 超过最大允许连接数，断开
     if (FMaxClients > 0) and (FConnectionList.Count > FMaxClients) then
@@ -2389,24 +2054,24 @@ constructor TIocpLineServer.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
 
-  FListenSocket := INVALID_SOCKET;
+  FListened := False;
 end;
 
 function TIocpLineServer.Start: Boolean;
 begin
-  if (FListenSocket <> INVALID_SOCKET) then Exit(True);
+  if FListened then Exit(True);
 
   StartupWorkers;
-  FListenSocket := inherited Listen(FAddr, FPort, 1);
-  Result := (FListenSocket <> INVALID_SOCKET);
+  FListened := inherited Listen(FAddr, FPort, 1);
+  Result := FListened;
 end;
 
 function TIocpLineServer.Stop: Boolean;
 begin
-  if (FListenSocket = INVALID_SOCKET) then Exit(True);
+  if not FListened then Exit(True);
 
   ShutdownWorkers;
-  FListenSocket := 0;
+  FListened := False;
   Result := True;
 end;
 
@@ -2428,7 +2093,7 @@ end;
 constructor TSimpleIocpTcpServer.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FListenSocket := INVALID_SOCKET;
+  FListened := False;
 
   FAddr := '';
   FInitAcceptNum := INIT_ACCEPTEX_NUM;
@@ -2443,21 +2108,21 @@ end;
 
 function TSimpleIocpTcpServer.Start: Boolean;
 begin
-  if (FListenSocket <> INVALID_SOCKET) then Exit(True);
+  if FListened then Exit(True);
 
   StartupWorkers;
-  FListenSocket := inherited Listen(FAddr, FPort, FInitAcceptNum);
-  Result := (FListenSocket <> INVALID_SOCKET);
+  FListened := inherited Listen(FAddr, FPort, FInitAcceptNum);
+  Result := FListened;
   if Result then
     FStartTick := GetTickCount;
 end;
 
 function TSimpleIocpTcpServer.Stop: Boolean;
 begin
-  if (FListenSocket = INVALID_SOCKET) then Exit(True);
+  if not FListened then Exit(True);
 
   ShutdownWorkers;
-  FListenSocket := INVALID_SOCKET;
+  FListened := False;
   Result := True;
   FStartTick := 0;
 end;
@@ -2467,12 +2132,10 @@ initialization
   IdWship6.InitLibrary;
 
   IoCachePool := TIocpMemoryPool.Create(NET_CACHE_SIZE, MAX_FREE_IO_DATA_BLOCKS);
-//  IoQueuePool := TIocpMemoryPool.Create(SizeOf(TIocpIoBlock), MAX_FREE_IO_DATA_BLOCKS);
   FileCachePool := TIocpMemoryPool.Create(FILE_CACHE_SIZE, MAX_FREE_HANDLE_DATA_BLOCKS);
 
 finalization
   IoCachePool.Release;
-//  IoQueuePool.Release;
   FileCachePool.Release;
 
   IdWinsock2.UninitializeWinSock;
