@@ -83,7 +83,7 @@ type
   private
     FAddr: string;
     FPort: Word;
-    FListenSocket: TSocket;
+    FListened: Boolean;
     FInitAcceptNum: Integer;
     FStartTick: DWORD;
   public
@@ -348,7 +348,7 @@ end;
 constructor TIocpPacketServer.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FListenSocket := INVALID_SOCKET;
+  FListened := False;
 
   FAddr := '';
   FInitAcceptNum := INIT_ACCEPTEX_NUM;
@@ -363,21 +363,21 @@ end;
 
 function TIocpPacketServer.Start: Boolean;
 begin
-  if (FListenSocket <> INVALID_SOCKET) then Exit(True);
+  if FListened then Exit(True);
 
   StartupWorkers;
-  FListenSocket := inherited Listen(FAddr, FPort, FInitAcceptNum);
-  Result := (FListenSocket <> INVALID_SOCKET);
+  FListened := inherited Listen(FAddr, FPort, FInitAcceptNum);
+  Result := FListened;
   if Result then
     FStartTick := GetTickCount;
 end;
 
 function TIocpPacketServer.Stop: Boolean;
 begin
-  if (FListenSocket = INVALID_SOCKET) then Exit(True);
+  if not FListened then Exit(True);
 
   ShutdownWorkers;
-  FListenSocket := INVALID_SOCKET;
+  FListened := False;
   Result := True;
   FStartTick := 0;
 end;
