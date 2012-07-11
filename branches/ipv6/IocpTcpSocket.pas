@@ -35,7 +35,7 @@ ZY. 2012.04.19
 // 启用超时检测时钟
 {$define __TIME_OUT_TIMER__}
 
-{$define __IPv6__}
+//{$define __IPv6__}
 
 interface
 
@@ -1528,34 +1528,33 @@ begin
       AppendLog('%s.AsyncConnect绑定ConnectEx(%d)端口失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
       Exit;
     end;
+
+    // 生成新的连接对象并绑定到IOCP
+    Connection := AllocConnection(ClientSocket);
+    if not AssociateSocketWithCompletionPort(ClientSocket, Connection) then
+    begin
+      IdWinsock2.CloseSocket(ClientSocket);
+      FConnectionPool.FreeObject(Connection);
+      Exit;
+    end;
+
+    if (Connection.AddRef = 1) then Exit;
+
+    Connection.Tag := Tag;
+    ExtractAddrInfo(PSockAddrIn(POutAddrInfo.ai_addr)^, Connection.FRemoteIP, Connection.FRemotePort);
+    PerIoData := AllocIoData(ClientSocket, iotConnect);
+    if not ConnectEx(ClientSocket, POutAddrInfo.ai_addr, POutAddrInfo.ai_addrlen, nil, 0, PCardinal(0)^, PWSAOverlapped(PerIoData)) and
+      (WSAGetLastError <> WSA_IO_PENDING) then
+    begin
+      LastErr := WSAGetLastError;
+      AppendLog('%s.AsyncConnect.ConnectEx(%d)失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+      FreeIoData(PerIoData);
+      Connection.Release;
+      Connection.Disconnect;
+      Exit;
+    end;
   finally
     freeaddrinfo(POutAddrInfo);
-  end;
-
-  // 生成新的连接对象并绑定到IOCP
-  Connection := AllocConnection(ClientSocket);
-  if not AssociateSocketWithCompletionPort(ClientSocket, Connection) then
-  begin
-    IdWinsock2.CloseSocket(ClientSocket);
-    FConnectionPool.FreeObject(Connection);
-    Exit;
-  end;
-
-  if (Connection.AddRef = 1) then Exit;
-
-  Connection.Tag := Tag;
-  Connection.FRemoteAddr := TSockAddrIn(Addr);
-  ExtractAddrInfo(Connection.FRemoteAddr, Connection.FRemoteIP, Connection.FRemotePort);
-  PerIoData := AllocIoData(ClientSocket, iotConnect);
-  if not ConnectEx(ClientSocket, @Addr, SizeOf(TSockAddr), nil, 0, PCardinal(0)^, PWSAOverlapped(PerIoData)) and
-    (WSAGetLastError <> WSA_IO_PENDING) then
-  begin
-    LastErr := WSAGetLastError;
-    AppendLog('%s.AsyncConnect.ConnectEx(%d)失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
-    FreeIoData(PerIoData);
-    Connection.Release;
-    Connection.Disconnect;
-    Exit;
   end;
 
   Result := ClientSocket;
@@ -1919,7 +1918,7 @@ begin
     // 对于SO_UPDATE_ACCEPT_CONTEXT,最后一个参数optlen实际需要设定为SizeOf(PAnsiChar)
     // 这一点在MSDN的例子中都是错的！因为经过实际测试发现在64位程序中这里传递SizeOf(PerIoData.ListenSocket)
     // 的话会报错：10014,系统检测到在一个调用中尝试使用指针参数时的无效指针地址。
-    // 也就是说这里的optlen实际上应该传递的是一个指针的长度
+    // 也就是说这里的optlen实际上应该传递的是一个指针的长度(应该跟内存对齐有关系)
     if (setsockopt(PerIoData.ClientSocket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
 //      PAnsiChar(@(PerIoData.ListenSocket)), SizeOf(PerIoData.ListenSocket)) = SOCKET_ERROR) then
       PAnsiChar(@PerIoData.ListenSocket), SizeOf(PAnsiChar)) = SOCKET_ERROR) then
@@ -1930,11 +1929,14 @@ begin
     end;
 
     // 获取连接地址信息
-    LocalAddrLen := SizeOf(LocalAddr);
-    RemoteAddrLen := SizeOf(RemoteAddr);
+    //LocalAddrLen := SizeOf(LocalAddr);
+    //RemoteAddrLen := SizeOf(RemoteAddr);
+//    GetAcceptExSockaddrs(@PerIoData.Buffer.AcceptExBuffer[0], 0, ADDR_SIZE,
+//      ADDR_SIZE, PSockAddrIn(@LocalAddr)^, LocalAddrLen,
+//      PSockAddrIn(@RemoteAddr)^, RemoteAddrLen);
     GetAcceptExSockaddrs(@PerIoData.Buffer.AcceptExBuffer[0], 0, ADDR_SIZE,
-      ADDR_SIZE, PSockAddrIn(@LocalAddr)^, LocalAddrLen,
-      PSockAddrIn(@RemoteAddr)^, RemoteAddrLen);
+      ADDR_SIZE, LocalAddr, LocalAddrLen,
+      RemoteAddr, RemoteAddrLen);
 
     if not Connection.InitSocket then
     begin

@@ -1,6 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <BorlandProject>
+	<Transactions/>
 	<Default.Personality>
+<<<<<<< .mine
+		<Projects ActiveProject="C:\VCL\VaniPackage\IOCP\Test\IocpServer\IocpServer.dproj"/>
+=======
 		<Projects ActiveProject="C:\VCL\VaniPackage\IOCP\Test\IocpVariantClient\IocpVariantClient.dproj"/>
+>>>>>>> .r18
 	</Default.Personality>
 </BorlandProject>
