@@ -111,11 +111,11 @@ type
     FRcvBuffer: Pointer;
     FPendingSend: Integer;
     FPendingRecv: Integer;
+    FIsIPv6: Boolean;
     {$IFDEF __TIME_OUT_TIMER__}
     FTimer: TIocpTimerQueueTimer;
     FTimeout: DWORD;
     FLife: DWORD;
-    FIsIPv6: Boolean;
     // 连接超时检查
     procedure OnTimerExecute(Sender: TObject);
     procedure OnTimerCancel(Sender: TObject);
