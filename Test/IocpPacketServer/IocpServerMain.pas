@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls, ExtCtrls, IoUtils, DsiWin32,
+  Dialogs, StdCtrls, ExtCtrls, IoUtils, SyncObjs,
   IocpUtils, IocpTcpSocket, IocpPacketSocket, IocpLogger, uGlobalVars;
 
 type
@@ -243,21 +243,21 @@ end;
 procedure TTestIocpServer.TriggerPacketRecv(Client: TIocpPacketConnection;
   const Packet: TIocpPacket);
 begin
-  DSiInterlockedIncrement64(FSuccessCnt);
+  TInterlocked.Increment(FSuccessCnt);
   SendTestData(Client);
 end;
 
 procedure TTestIocpServer.TriggerPacketHeaderCrcError(
   Client: TIocpPacketConnection; const Packet: TIocpPacket);
 begin
-  DSiInterlockedIncrement64(FCrcErrorCnt);
+  TInterlocked.Increment(FCrcErrorCnt);
   SavePacketHeader(Packet);
 end;
 
 procedure TTestIocpServer.TriggerPacketDataCrcError(Client: TIocpPacketConnection;
   const Packet: TIocpPacket);
 begin
-  DSiInterlockedIncrement64(FCrcErrorCnt);
+  TInterlocked.Increment(FCrcErrorCnt);
   SavePacketData(Packet);
 end;
 
