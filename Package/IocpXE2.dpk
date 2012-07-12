@@ -38,6 +38,8 @@ contains
   IocpHttpTunnel in '..\IocpHttpTunnel.pas',
   IocpPacketSocket in '..\IocpPacketSocket.pas',
   IocpTcpSocket in '..\IocpTcpSocket.pas',
-  IocpVariantSocket in '..\IocpVariantSocket.pas';
+  IocpVariantSocket in '..\IocpVariantSocket.pas',
+  IdWinsock2 in '..\IdWinsock2.pas',
+  IdWship6 in '..\IdWship6.pas';
 
 end.
