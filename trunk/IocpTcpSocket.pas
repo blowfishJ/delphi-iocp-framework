@@ -40,7 +40,7 @@ interface
 uses
   Windows, Messages, Classes, SysUtils, SyncObjs, Math, Contnrs, System.Generics.Collections,
   IdWinsock2, IdWship6, IocpApiFix, IocpThreadPool, IocpReadWriteLocker, IocpMemoryPool,
-  IocpObjectPool, IocpBuffer, IocpQueue, IocpTimerQueue, IocpLogger, IocpUtils, DSiWin32;
+  IocpObjectPool, IocpBuffer, IocpQueue, IocpTimerQueue, IocpLogger, IocpUtils;
 
 const
   SHUTDOWN_FLAG = ULONG_PTR(-1);
@@ -1933,7 +1933,7 @@ end;
 function TIocpTcpSocket._TriggerClientRecvData(Client: TIocpSocketConnection;
   Buf: Pointer; Len: Integer): Boolean;
 begin
-  DSiInterlockedExchangeAdd64(FRecvBytes, Len);
+  TInterlocked.Add(FRecvBytes, Len);
   Result := Client._TriggerClientRecvData(Buf, Len);
   if Result then
     Result := TriggerClientRecvData(Client, Buf, Len);
@@ -1942,7 +1942,7 @@ end;
 function TIocpTcpSocket._TriggerClientSentData(Client: TIocpSocketConnection;
   Buf: Pointer; Len: Integer): Boolean;
 begin
-  DSiInterlockedExchangeAdd64(FSentBytes, Len);
+  TInterlocked.Add(FSentBytes, Len);
   Result := Client._TriggerClientSentData(Buf, Len);
   if Result then
     Result := TriggerClientSentData(Client, Buf, Len);

@@ -5,7 +5,7 @@ unit IocpHttpServer;
 interface
 
 uses
-  Windows, Messages, Classes, SysUtils, StrUtils, SyncObjs, Math, IOUtils, IdWinsock2,
+  Windows, Messages, Classes, SysUtils, StrUtils, SyncObjs, Math, IoUtils,
   IocpTcpSocket, IocpThreadPool, IocpHttpUtils, IocpBuffer, IocpLogger;
 
 const

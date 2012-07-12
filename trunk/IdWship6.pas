@@ -413,10 +413,7 @@ procedure CloseLibrary;
 implementation
 
 uses
-  SysUtils
-  {$IFDEF HAS_SIZE_T}
-  , IdGlobal
-  {$ENDIF};
+  SysUtils;
 
 var
   hWship6Dll : THandle = 0; // Wship6.dll handle
@@ -442,11 +439,33 @@ begin
     GIA_EAI_SYSTEM:
       begin
         Result := 0; // avoid warning
-        IndyRaiseLastError;
+        RaiseLastOSError;
       end;
     else
       Result := gaiError;
   end;
+end;
+
+function InterlockedExchangeTHandle(var VTarget: THandle; const AValue: THandle): THandle;
+{$IFDEF USE_INLINE}inline;{$ENDIF}
+begin
+  {$IFDEF HAS_TInterlocked}
+    {$IFDEF THANDLE_32}
+  Result := THandle(TInterlocked.Exchange(LongInt(VTarget), LongInt(AValue)));
+    {$ENDIF}
+  //Temporary workaround.  TInterlocked for Emb really should accept 64 bit unsigned values as set of parameters
+  //for TInterlocked.Exchange since 64-bit wide integers are common on 64 bit platforms.
+    {$IFDEF THANDLE_64}
+  Result := THandle(TInterlocked.Exchange(Int64(VTarget), Int64(AValue)));
+    {$ENDIF}
+  {$ELSE}
+    {$IFDEF THANDLE_32}
+  Result := THandle(InterlockedExchange(LongInt(VTarget), LongInt(AValue)));
+    {$ENDIF}
+    {$IFDEF THANDLE_64}
+  Result := THandle(InterlockedExchange64(Int64(VTarget), Int64(AValue)));
+    {$ENDIF}
+  {$ENDIF}
 end;
 
 procedure CloseLibrary;

@@ -419,9 +419,10 @@ var
 
 function gIocpLogger: TIocpLogger;
 begin
-  if (_gIocpLogger = nil) then
-    _gIocpLogger := TIocpLogger.Create;
-  Result := _gIocpLogger;
+  if (TInterlocked.CompareExchange<TIocpLogger>(_gIocpLogger, nil, nil) <> nil) then Exit(_gIocpLogger);
+
+  Result := TIocpLogger.Create;
+  TInterlocked.Exchange<TIocpLogger>(_gIocpLogger, Result);
 end;
 
 initialization
