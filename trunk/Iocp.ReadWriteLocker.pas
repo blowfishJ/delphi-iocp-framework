@@ -1,4 +1,4 @@
-unit IocpReadWriteLocker;
+unit Iocp.ReadWriteLocker;
 
 { 用原子操作加临界区实现的读写锁，性能比Delphi自带的高很多
 

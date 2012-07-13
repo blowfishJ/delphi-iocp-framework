@@ -1,4 +1,4 @@
-unit IocpObjectPool;
+unit Iocp.ObjectPool;
 
 interface
 

@@ -1,10 +1,10 @@
-unit IocpFileClient;
+unit Iocp.FileClient;
 
 interface
 
 uses
   Windows, Messages, SysUtils, Classes, IoUtils, Math,
-  IocpVariantPacket, IocpVariantSocket, IocpFileConst, IocpUtils, IocpLogger;
+  Iocp.VariantPacket, Iocp.VariantSocket, Iocp.FileConst, Iocp.Utils, Iocp.Logger;
 
 const
   BLOCK_SIZE = 16 * 1024;

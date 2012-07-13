@@ -1,4 +1,4 @@
-unit IocpHttpServer;
+unit Iocp.HttpServer;
 
 {$define __LOGIC_THREAD_POOL__}
 
@@ -6,7 +6,7 @@ interface
 
 uses
   Windows, Messages, Classes, SysUtils, StrUtils, SyncObjs, Math, IoUtils,
-  IocpTcpSocket, IocpThreadPool, IocpHttpUtils, IocpBuffer, IocpLogger;
+  Iocp.TcpSocket, Iocp.ThreadPool, Iocp.HttpUtils, Iocp.Buffer, Iocp.Logger;
 
 const
   IOCP_HTTP_SERVER_VERSION  = 'IocpHttpServer/1.0';

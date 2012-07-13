@@ -4,9 +4,8 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls, ExtCtrls, FileCtrl, System.Generics.Collections,
-  IocpUtils, IocpTcpSocket, IocpHttpTunnel, IocpHttpUtils, IocpLogger,
-  Vcl.Buttons;
+  Dialogs, StdCtrls, ExtCtrls, FileCtrl, System.Generics.Collections, Vcl.Buttons,
+  Iocp.Utils, Iocp.TcpSocket, Iocp.HttpTunnel, Iocp.HttpUtils, Iocp.Logger;
 
 type
   TTestIocpHttpTunnel = class(TIocpHttpTunnel)

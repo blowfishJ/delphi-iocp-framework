@@ -4,9 +4,8 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls, ExtCtrls, FileCtrl, IoUtils,
-  IocpUtils, IocpTcpSocket, IocpHttpServer, IocpHttpUtils, IocpBuffer, IocpLogger, IocpHttpClient,
-  Vcl.Buttons;
+  Dialogs, StdCtrls, ExtCtrls, FileCtrl, IoUtils, Vcl.Buttons,
+  Iocp.Utils, Iocp.TcpSocket, Iocp.HttpServer, Iocp.HttpUtils, Iocp.Buffer, Iocp.Logger, Iocp.HttpClient;
 
 type
   TTestIocpHttpServer = class(TIocpHttpServer)

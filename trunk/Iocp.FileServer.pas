@@ -1,4 +1,4 @@
-unit IocpFileServer;
+unit Iocp.FileServer;
 
 //{$define __DBG_VANI_FILE__}
 
@@ -6,7 +6,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, IoUtils,
-  IocpVariantPacket, IocpVariantSocket, IocpFileConst, IocpLogger, IocpUtils;
+  Iocp.VariantPacket, Iocp.VariantSocket, Iocp.FileConst, Iocp.Logger, Iocp.Utils;
 
 type
   TServerTransorttingEvent = procedure(Sender: TObject; Client: TIocpVariantServerConnection; const FileName: string; const FilePos, BlockSize: Int64; Stream: TMemoryStream) of object;

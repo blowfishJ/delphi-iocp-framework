@@ -1,11 +1,11 @@
-unit IocpPacketSocket;
+unit Iocp.PacketSocket;
 
 {$define __LOGIC_THREAD_POOL__}
 
 interface
 
 uses
-  Windows, Classes, SysUtils, Math, IdWinsock2, IocpTcpSocket, IocpThreadPool, IocpLogger;
+  Windows, Classes, SysUtils, Math, Iocp.Winsock2, Iocp.TcpSocket, Iocp.ThreadPool, Iocp.Logger;
 
 type
   TIocpHeader = record

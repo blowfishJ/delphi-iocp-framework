@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, ExtCtrls, SyncObjs,
-  IocpUtils, IocpTcpSocket, IocpVariantPacket, IocpVariantSocket, IocpLogger;
+  Iocp.Utils, Iocp.TcpSocket, Iocp.VariantPacket, Iocp.VariantSocket, Iocp.Logger;
 
 {$define __SND_FIXED_SIZE__}
 

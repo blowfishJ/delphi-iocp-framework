@@ -1,10 +1,10 @@
-unit IocpVariantSocket;
+unit Iocp.VariantSocket;
 
 interface
 
 uses
-  Windows, Classes, SysUtils, Math, IocpTcpSocket, IocpPacketSocket, IocpVariantPacket,
-  IocpUtils;
+  Windows, Classes, SysUtils, Math, Iocp.TcpSocket, Iocp.PacketSocket, Iocp.VariantPacket,
+  Iocp.Utils;
 
 type
   TIocpVariantServerConnection = class(TIocpPacketConnection);

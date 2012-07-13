@@ -4,8 +4,8 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, ExtCtrls, StdCtrls, SyncObjs, IocpTcpSocket, IocpLogger, Spin, WinSock2,
-  IocpUtils;
+  Dialogs, ExtCtrls, StdCtrls, SyncObjs, Spin,
+  Iocp.Winsock2, Iocp.TcpSocket, Iocp.Logger, Iocp.Utils;
 
 {$define __SND_FIXED_SIZE__}
 

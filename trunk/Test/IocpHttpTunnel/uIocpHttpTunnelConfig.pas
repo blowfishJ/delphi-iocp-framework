@@ -33,7 +33,7 @@ var
 implementation
 
 uses
-  uGlobalVars, IocpLogger;
+  uGlobalVars, Iocp.Logger;
 
 { TIocpHttpTunnelConfig }
 
