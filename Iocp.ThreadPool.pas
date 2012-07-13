@@ -1,4 +1,4 @@
-unit IocpThreadPool;
+unit Iocp.ThreadPool;
 
 {*
   利用IOCP实现的线程池，效率远高于普通线程池
@@ -8,7 +8,7 @@ unit IocpThreadPool;
 interface
 
 uses
-  Windows, Classes, SysUtils, Math, IocpApiFix;
+  Windows, Classes, SysUtils, Math, Iocp.ApiFix;
 
 const
   SHUTDOWN_FLAG = ULONG_PTR(-1);
@@ -95,7 +95,7 @@ var
   CompKey: ULONG_PTR;
 begin
   FPool.DoThreadStart(Self);
-  while not Terminated and IocpApiFix.GetQueuedCompletionStatus(FPool.FIocpHandle, Bytes, CompKey, POverlapped(Request), INFINITE) do
+  while not Terminated and Iocp.ApiFix.GetQueuedCompletionStatus(FPool.FIocpHandle, Bytes, CompKey, POverlapped(Request), INFINITE) do
   try
     // 不是有效的请求，忽略
     if (CompKey <> ULONG_PTR(FPool)) then Continue;
@@ -147,7 +147,7 @@ begin
   if (FIocpHandle = 0) then Exit;
 
   InterlockedIncrement(FPendingRequest);
-  Result := IocpApiFix.PostQueuedCompletionStatus(FIocpHandle, 0, ULONG_PTR(Self), POverlapped(Request));
+  Result := Iocp.ApiFix.PostQueuedCompletionStatus(FIocpHandle, 0, ULONG_PTR(Self), POverlapped(Request));
   if not Result then
     InterlockedDecrement(FPendingRequest);
 end;
@@ -171,7 +171,7 @@ begin
   // 经实际测试发现：并发线程数如果只保持每个CPU一个，在IOCP大并发请求的处理中会出现待处理请求大量堆积
   // 从而出现内存的大量消耗，将并发数设置为上面计算出来的NumberOfThreads能保证逻辑请求尽可能快的被响应
   // 这样内存消耗几乎不会出现什么大的波动（收发速度会略微降低，不过这点牺牲是完全值得的）
-  FIocpHandle := IocpApiFix.CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, NumberOfThreads);
+  FIocpHandle := Iocp.ApiFix.CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, NumberOfThreads);
   if (FIocpHandle = INVALID_HANDLE_VALUE) then
     raise Exception.Create('IocpThreadPool创建IOCP对象失败');
 
@@ -193,7 +193,7 @@ begin
 
   // 给所有工作线程发送退出命令
   for i := 0 to High(FThreads) do
-    IocpApiFix.PostQueuedCompletionStatus(FIocpHandle, 0, ULONG_PTR(Self), POverLapped(SHUTDOWN_FLAG));
+    Iocp.ApiFix.PostQueuedCompletionStatus(FIocpHandle, 0, ULONG_PTR(Self), POverLapped(SHUTDOWN_FLAG));
 
   // 等待工作线程结束
   WaitForMultipleObjects(Length(FThreadHandles), Pointer(FThreadHandles), True, INFINITE);

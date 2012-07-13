@@ -85,15 +85,29 @@
 			</DelphiCompile>
 			<DCCReference Include="rtl.dcp"/>
 			<DCCReference Include="vcl.dcp"/>
-			<DCCReference Include="..\IocpFileClient.pas"/>
-			<DCCReference Include="..\IocpFileServer.pas"/>
-			<DCCReference Include="..\IocpHttpServer.pas"/>
-			<DCCReference Include="..\IocpHttpTunnel.pas"/>
-			<DCCReference Include="..\IocpPacketSocket.pas"/>
-			<DCCReference Include="..\IocpTcpSocket.pas"/>
-			<DCCReference Include="..\IocpVariantSocket.pas"/>
-			<DCCReference Include="..\IdWinsock2.pas"/>
-			<DCCReference Include="..\IdWship6.pas"/>
+			<DCCReference Include="..\Iocp.Winsock2.pas"/>
+			<DCCReference Include="..\Iocp.Wship6.pas"/>
+			<DCCReference Include="..\Iocp.ApiFix.pas"/>
+			<DCCReference Include="..\Iocp.Buffer.pas"/>
+			<DCCReference Include="..\Iocp.FileClient.pas"/>
+			<DCCReference Include="..\Iocp.FileConst.pas"/>
+			<DCCReference Include="..\Iocp.FileServer.pas"/>
+			<DCCReference Include="..\Iocp.HttpClient.pas"/>
+			<DCCReference Include="..\Iocp.HttpServer.pas"/>
+			<DCCReference Include="..\Iocp.HttpTunnel.pas"/>
+			<DCCReference Include="..\Iocp.HttpUtils.pas"/>
+			<DCCReference Include="..\Iocp.Logger.pas"/>
+			<DCCReference Include="..\Iocp.MemoryPool.pas"/>
+			<DCCReference Include="..\Iocp.ObjectPool.pas"/>
+			<DCCReference Include="..\Iocp.PacketSocket.pas"/>
+			<DCCReference Include="..\Iocp.Queue.pas"/>
+			<DCCReference Include="..\Iocp.ReadWriteLocker.pas"/>
+			<DCCReference Include="..\Iocp.TcpSocket.pas"/>
+			<DCCReference Include="..\Iocp.ThreadPool.pas"/>
+			<DCCReference Include="..\Iocp.TimerQueue.pas"/>
+			<DCCReference Include="..\Iocp.Utils.pas"/>
+			<DCCReference Include="..\Iocp.VariantPacket.pas"/>
+			<DCCReference Include="..\Iocp.VariantSocket.pas"/>
 			<BuildConfiguration Include="Release">
 				<Key>Cfg_2</Key>
 				<CfgParent>Base</CfgParent>

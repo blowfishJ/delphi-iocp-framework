@@ -28,7 +28,7 @@
   Rev 1.0    11/13/2002 09:03:24 AM  JPMugaas
 }
 
-unit IdWship6;
+unit Iocp.Wship6;
 
 interface
 
@@ -61,7 +61,7 @@ uses
   syncobjs, //here to facilitate inlining with Delphi
   {$ENDIF}
   Windows,
-  IdWinsock2;
+  Iocp.Winsock2;
 
 const
   Wship6_dll =   'Wship6.dll';    {do not localize}
@@ -72,8 +72,8 @@ const
 
   //JPM
   //Note that I am adding a GIA_ prefix on my own because
-  //some names here share some names defined in IdWinsock2 causing
-  //an unpredictible problem. The values are not defined the same in IdWinsock2
+  //some names here share some names defined in Iocp.Winsock2 causing
+  //an unpredictible problem. The values are not defined the same in Iocp.Winsock2
   {$EXTERNALSYM GIA_EAI_ADDRFAMILY}
   GIA_EAI_ADDRFAMILY = 1  ; // Address family for nodename not supported.
   {$EXTERNALSYM GIA_EAI_AGAIN}
@@ -533,11 +533,11 @@ hProcHandle provides a transparant way of managing the two possible library
 locations.  hWship6Dll is kept so we can unload the Wship6.dll if necessary.
 }
   //Winsock2 has to be loaded by IdWinsock first.
-  if not IdWinsock2.Winsock2Loaded then
+  if not Iocp.Winsock2.Winsock2Loaded then
   begin
-    IdWinsock2.InitializeWinSock;
+    Iocp.Winsock2.InitializeWinSock;
   end;
-  hProcHandle := IdWinsock2.WinsockHandle;
+  hProcHandle := Iocp.Winsock2.WinsockHandle;
   getaddrinfo := GetProcAddress(hProcHandle, fn_getaddrinfo);
   if not Assigned(getaddrinfo) then
   begin

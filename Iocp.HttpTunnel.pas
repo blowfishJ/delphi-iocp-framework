@@ -1,10 +1,10 @@
-unit IocpHttpTunnel;
+unit Iocp.HttpTunnel;
 
 interface
 
 uses
-  Windows, Messages, Classes, SysUtils, SyncObjs, StrUtils, System.Generics.Collections, IdWinsock2,
-  IoUtils, IocpTcpSocket, IocpHttpServer, IocpBuffer, IocpHttpUtils, IocpLogger, uGlobalVars;
+  Windows, Messages, Classes, SysUtils, SyncObjs, StrUtils, System.Generics.Collections, Iocp.Winsock2,
+  IoUtils, Iocp.TcpSocket, Iocp.HttpServer, Iocp.Buffer, Iocp.HttpUtils, Iocp.Logger, uGlobalVars;
 
 type
   TIocpHttpTunnelConnection = class;

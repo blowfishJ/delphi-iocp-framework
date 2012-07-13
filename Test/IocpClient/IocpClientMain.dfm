@@ -24,8 +24,6 @@ object fmIocpClient: TfmIocpClient
     Height = 222
     Align = alClient
     TabOrder = 0
-    ExplicitTop = 97
-    ExplicitHeight = 251
     object lbConnections: TLabel
       Left = 136
       Top = 23

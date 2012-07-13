@@ -1,11 +1,11 @@
-unit IocpMemoryPool;
+unit Iocp.MemoryPool;
 
 {$define __ZERO_MEMORY__}
 
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, IocpLogger;
+  Windows, Classes, SysUtils, SyncObjs, Iocp.Logger;
 
 type
   TIocpMemoryPool = class

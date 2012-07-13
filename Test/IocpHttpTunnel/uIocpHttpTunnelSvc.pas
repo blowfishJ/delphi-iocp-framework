@@ -4,10 +4,10 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Classes, Vcl.Graphics, Vcl.Controls, Vcl.SvcMgr, Vcl.Dialogs,
-  IocpTcpSocket, IocpHttpTunnel, uIocpHttpTunnelConfig;
+  Iocp.TcpSocket, Iocp.HttpTunnel, uIocpHttpTunnelConfig;
 
 type
-  TIocpMultiHttpTunnel = class(IocpHttpTunnel.TIocpHttpTunnel)
+  TIocpMultiHttpTunnel = class(Iocp.HttpTunnel.TIocpHttpTunnel)
   private
     function GetDstHost(const Host: string; out DstHost: THostEntry): Boolean;
   protected

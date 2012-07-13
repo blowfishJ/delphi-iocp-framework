@@ -1,11 +1,11 @@
-unit IocpHttpClient;
+unit Iocp.HttpClient;
 
 interface
 
 uses
   Windows, Messages, Classes, SysUtils, StrUtils, SyncObjs, Math, IoUtils,
-  IocpTcpSocket, IocpThreadPool, IocpHttpUtils, IocpBuffer,
-  IocpUtils, IocpLogger;
+  Iocp.TcpSocket, Iocp.ThreadPool, Iocp.HttpUtils, Iocp.Buffer,
+  Iocp.Utils, Iocp.Logger;
 
 const
   IOCP_HTTP_CLIENT_VERSION = 'IocpHttpClient/1.0';

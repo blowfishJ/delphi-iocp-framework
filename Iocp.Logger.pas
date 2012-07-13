@@ -1,9 +1,9 @@
-unit IocpLogger;
+unit Iocp.Logger;
 
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, uGlobalVars, IocpUtils;
+  Windows, Classes, SysUtils, SyncObjs, uGlobalVars, Iocp.Utils;
 
 type
   TLogType = (ltNormal, ltWarning, ltError, ltException);

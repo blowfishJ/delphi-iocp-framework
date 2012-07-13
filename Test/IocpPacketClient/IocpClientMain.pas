@@ -4,8 +4,8 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, ExtCtrls, StdCtrls, SyncObjs, IdWinsock2,
-  IocpTcpSocket, IocpPacketSocket, IocpLogger, IocpUtils, uGlobalVars;
+  Dialogs, ExtCtrls, StdCtrls, SyncObjs,
+  Iocp.TcpSocket, Iocp.PacketSocket, Iocp.Logger, Iocp.Utils, uGlobalVars;
 
 type
   TTestIocpClient = class(TIocpPacketSocket)

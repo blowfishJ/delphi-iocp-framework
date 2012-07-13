@@ -1,4 +1,4 @@
-unit IocpTcpSocket;
+unit Iocp.TcpSocket;
 
 {关于客户端Socket池：
 客户端使用ConnectEx创建的Socket连接，只有在服务端主动断开的情况，这个Socket才能被重用；
@@ -39,8 +39,8 @@ interface
 
 uses
   Windows, Messages, Classes, SysUtils, SyncObjs, Math, Contnrs, System.Generics.Collections,
-  IdWinsock2, IdWship6, IocpApiFix, IocpThreadPool, IocpReadWriteLocker, IocpMemoryPool,
-  IocpObjectPool, IocpBuffer, IocpQueue, IocpTimerQueue, IocpLogger, IocpUtils;
+  Iocp.Winsock2, Iocp.Wship6, Iocp.ApiFix, Iocp.ThreadPool, Iocp.ReadWriteLocker, Iocp.MemoryPool,
+  Iocp.ObjectPool, Iocp.Buffer, Iocp.Queue, Iocp.TimerQueue, Iocp.Logger, Iocp.Utils;
 
 const
   SHUTDOWN_FLAG = ULONG_PTR(-1);
@@ -944,7 +944,7 @@ begin
 //  AppendLog('%s.IoThread %d start', [FOwner.ClassName, ThreadID]);
   while not Terminated do
   try
-    IocpStatusOk := IocpApiFix.GetQueuedCompletionStatus(FOwner.FIocpHandle,
+    IocpStatusOk := Iocp.ApiFix.GetQueuedCompletionStatus(FOwner.FIocpHandle,
       BytesTransferred, ULONG_PTR(Connection), POverlapped(PerIoData), WSA_INFINITE);
 
     {
@@ -1182,7 +1182,7 @@ end;
 function TIocpTcpSocket.AssociateSocketWithCompletionPort(Socket: TSocket;
   Connection: TIocpSocketConnection): Boolean;
 begin
-  Result := (IocpApiFix.CreateIoCompletionPort(Socket, FIocpHandle, ULONG_PTR(Connection), 0) <> 0);
+  Result := (Iocp.ApiFix.CreateIoCompletionPort(Socket, FIocpHandle, ULONG_PTR(Connection), 0) <> 0);
   if not Result then
     AppendLog(Format('绑定IOCP失败,Socket=%d, ERR=%d,%s', [Socket, GetLastError, SysErrorMessage(GetLastError)]), ltError);
 end;
@@ -1275,7 +1275,7 @@ begin
     if (bind(ClientSocket, PBindAddr, BindAddrSize) = SOCKET_ERROR) then
     begin
       LastErr := WSAGetLastError;
-      IdWinsock2.CloseSocket(ClientSocket);
+      Iocp.Winsock2.CloseSocket(ClientSocket);
       AppendLog('%s.AsyncConnect绑定ConnectEx(%d)端口失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
       Exit;
     end;
@@ -1284,7 +1284,7 @@ begin
     Connection := AllocConnection(ClientSocket);
     if not AssociateSocketWithCompletionPort(ClientSocket, Connection) then
     begin
-      IdWinsock2.CloseSocket(ClientSocket);
+      Iocp.Winsock2.CloseSocket(ClientSocket);
       FConnectionPool.FreeObject(Connection);
       Exit;
     end;
@@ -1452,22 +1452,22 @@ begin
         if (bind(ListenSocket, Ptr.ai_addr, Ptr.ai_addrlen) = SOCKET_ERROR) then
         begin
           LastErr := WSAGetLastError;
-          IdWinsock2.CloseSocket(ListenSocket);
+          Iocp.Winsock2.CloseSocket(ListenSocket);
           AppendLog('%s.绑定监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
           Exit;
         end;
 
-        if (IdWinsock2.listen(ListenSocket, SOMAXCONN) = SOCKET_ERROR) then
+        if (Iocp.Winsock2.listen(ListenSocket, SOMAXCONN) = SOCKET_ERROR) then
         begin
           LastErr := WSAGetLastError;
-          IdWinsock2.CloseSocket(ListenSocket);
+          Iocp.Winsock2.CloseSocket(ListenSocket);
           AppendLog('%s.启动监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
           Exit;
         end;
 
         if not AssociateSocketWithCompletionPort(ListenSocket, nil) then
         begin
-          IdWinsock2.CloseSocket(ListenSocket);
+          Iocp.Winsock2.CloseSocket(ListenSocket);
           AppendLog('%s.绑定监听端口(%d)到IOCP失败', [ClassName, Port], ltWarning);
           Exit;
         end;
@@ -1769,8 +1769,8 @@ begin
  setsockopt(Socket, SOL_SOCKET, SO_LINGER, PAnsiChar(@lingerStruct), SizeOf(lingerStruct));
 //  CancelIo(Socket);}
 
-  IdWinsock2.shutdown(Socket, SD_BOTH);
-  IdWinsock2.closesocket(Socket);
+  Iocp.Winsock2.shutdown(Socket, SD_BOTH);
+  Iocp.Winsock2.closesocket(Socket);
 end;
 
 procedure TIocpTcpSocket.StartupWorkers;
@@ -1793,7 +1793,7 @@ begin
 
   // 创建完成端口
   // NumberOfConcurrentThreads = 0 表示每个CPU保持一个并发线程
-  FIocpHandle := IocpApiFix.CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
+  FIocpHandle := Iocp.ApiFix.CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
   if (FIocpHandle = INVALID_HANDLE_VALUE) then
     raise Exception.CreateFmt('%s.StartupWorkers创建IOCP对象失败', [ClassName]);
 
@@ -1846,7 +1846,7 @@ begin
 
   // 关闭IO线程
   for i := Low(FIoThreads) to High(FIoThreads) do
-    IocpApiFix.PostQueuedCompletionStatus(FIocpHandle, 0, 0, POverlapped(SHUTDOWN_FLAG));
+    Iocp.ApiFix.PostQueuedCompletionStatus(FIocpHandle, 0, 0, POverlapped(SHUTDOWN_FLAG));
 
   // 等待IO线程结束
   WaitForMultipleObjects(Length(FIoThreadHandles), Pointer(FIoThreadHandles), True, INFINITE);
@@ -2128,8 +2128,8 @@ begin
 end;
 
 initialization
-  IdWinsock2.InitializeWinSock;
-  IdWship6.InitLibrary;
+  Iocp.Winsock2.InitializeWinSock;
+  Iocp.Wship6.InitLibrary;
 
   IoCachePool := TIocpMemoryPool.Create(NET_CACHE_SIZE, MAX_FREE_IO_DATA_BLOCKS);
   FileCachePool := TIocpMemoryPool.Create(FILE_CACHE_SIZE, MAX_FREE_HANDLE_DATA_BLOCKS);
@@ -2138,7 +2138,7 @@ finalization
   IoCachePool.Release;
   FileCachePool.Release;
 
-  IdWinsock2.UninitializeWinSock;
+  Iocp.Winsock2.UninitializeWinSock;
 
 end.
 

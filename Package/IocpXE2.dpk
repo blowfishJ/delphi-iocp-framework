@@ -32,14 +32,28 @@ requires
   vcl;
 
 contains
-  IocpFileClient in '..\IocpFileClient.pas',
-  IocpFileServer in '..\IocpFileServer.pas',
-  IocpHttpServer in '..\IocpHttpServer.pas',
-  IocpHttpTunnel in '..\IocpHttpTunnel.pas',
-  IocpPacketSocket in '..\IocpPacketSocket.pas',
-  IocpTcpSocket in '..\IocpTcpSocket.pas',
-  IocpVariantSocket in '..\IocpVariantSocket.pas',
-  IdWinsock2 in '..\IdWinsock2.pas',
-  IdWship6 in '..\IdWship6.pas';
+  Iocp.Winsock2 in '..\Iocp.Winsock2.pas',
+  Iocp.Wship6 in '..\Iocp.Wship6.pas',
+  Iocp.ApiFix in '..\Iocp.ApiFix.pas',
+  Iocp.Buffer in '..\Iocp.Buffer.pas',
+  Iocp.FileClient in '..\Iocp.FileClient.pas',
+  Iocp.FileConst in '..\Iocp.FileConst.pas',
+  Iocp.FileServer in '..\Iocp.FileServer.pas',
+  Iocp.HttpClient in '..\Iocp.HttpClient.pas',
+  Iocp.HttpServer in '..\Iocp.HttpServer.pas',
+  Iocp.HttpTunnel in '..\Iocp.HttpTunnel.pas',
+  Iocp.HttpUtils in '..\Iocp.HttpUtils.pas',
+  Iocp.Logger in '..\Iocp.Logger.pas',
+  Iocp.MemoryPool in '..\Iocp.MemoryPool.pas',
+  Iocp.ObjectPool in '..\Iocp.ObjectPool.pas',
+  Iocp.PacketSocket in '..\Iocp.PacketSocket.pas',
+  Iocp.Queue in '..\Iocp.Queue.pas',
+  Iocp.ReadWriteLocker in '..\Iocp.ReadWriteLocker.pas',
+  Iocp.TcpSocket in '..\Iocp.TcpSocket.pas',
+  Iocp.ThreadPool in '..\Iocp.ThreadPool.pas',
+  Iocp.TimerQueue in '..\Iocp.TimerQueue.pas',
+  Iocp.Utils in '..\Iocp.Utils.pas',
+  Iocp.VariantPacket in '..\Iocp.VariantPacket.pas',
+  Iocp.VariantSocket in '..\Iocp.VariantSocket.pas';
 
 end.

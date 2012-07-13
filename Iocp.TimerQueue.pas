@@ -1,4 +1,4 @@
-unit IocpTimerQueue;
+unit Iocp.TimerQueue;
 
 {基于Win32系统的时钟队列
 主要用于检测IOCP连接是否超时
@@ -7,7 +7,7 @@ unit IocpTimerQueue;
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, System.Generics.Collections, IocpLogger;
+  Windows, Classes, SysUtils, SyncObjs, System.Generics.Collections, Iocp.Logger;
 
 type
   TIocpTimerQueueTimer = class;
