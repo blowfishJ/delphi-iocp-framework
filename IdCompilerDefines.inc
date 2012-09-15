@@ -208,6 +208,17 @@
   {$ENDIF}
 {$ENDIF}
 
+//Delphi & CBuilder XE3 (Pulsar)
+{$if COMPILERVERSION >= 24}
+  // DCC is now defined by the compiler
+  {$DEFINE VCL_XE2}
+  {$IFDEF CBUILDER}
+    {$DEFINE CBUILDER_XE2}
+  {$ELSE}
+    {$DEFINE DELPHI_XE2}
+  {$ENDIF}
+{$ifend}
+
 // Delphi.NET
 // Covers D8+
 {$IFDEF CIL}
