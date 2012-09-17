@@ -244,6 +244,13 @@ object fmIocpHttpServer: TfmIocpHttpServer
       Font.Style = []
       ParentFont = False
     end
+    object Memo1: TMemo
+      Left = 191
+      Top = 6
+      Width = 186
+      Height = 203
+      TabOrder = 0
+    end
   end
   object Panel2: TPanel
     Left = 0

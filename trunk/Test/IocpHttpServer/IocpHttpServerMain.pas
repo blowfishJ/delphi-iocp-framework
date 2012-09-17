@@ -52,6 +52,7 @@ type
     edtTimeout: TLabeledEdit;
     edtLife: TLabeledEdit;
     chkFastTest: TCheckBox;
+    Memo1: TMemo;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnStartClick(Sender: TObject);
@@ -67,7 +68,7 @@ type
 
     procedure UpdateInfo;
   public
-    { Public declarations }
+    procedure AddLog(const Msg: string);
   end;
 
 var
@@ -97,6 +98,14 @@ begin
     Result := Format('%dG ', [Bytes div GBYTES]) + BytesToStr(Bytes mod GBYTES)
   else
     Result := Format('%dT ', [Bytes div TBYTES]) + BytesToStr(Bytes mod TBYTES);
+end;
+
+procedure TfmIocpHttpServer.AddLog(const Msg: string);
+begin
+  TThread.Synchronize(nil, procedure
+    begin
+      Memo1.Lines.Add(Msg);
+    end);
 end;
 
 procedure TfmIocpHttpServer.btnSelectDirClick(Sender: TObject);
@@ -213,6 +222,7 @@ begin
     Client.AnswerHTML('', 'text/plain', '', RawByteString('Hello World'))
   else
     inherited DoOnRequest(Client);
+  fmIocpHttpServer.AddLog(Client.Method + ' ' + Client.PathAndParams);
 end;
 
 end.
