@@ -137,8 +137,8 @@ type
     procedure DecPendingSend;
     function PostWrite(const Buf: Pointer; Size: Integer): Boolean;
 
-    function _TriggerClientRecvData(Buf: Pointer; Len: Integer): Boolean;
-    function _TriggerClientSentData(Buf: Pointer; Len: Integer): Boolean;
+    procedure _TriggerClientRecvData(Buf: Pointer; Len: Integer);
+    procedure _TriggerClientSentData(Buf: Pointer; Len: Integer);
     function _Send(Buf: Pointer; Size: Integer): Integer;
   protected
     procedure Initialize; override;
@@ -703,16 +703,13 @@ begin
   end;
 end;
 
-function TIocpSocketConnection._TriggerClientRecvData(Buf: Pointer; Len: Integer): Boolean;
+procedure TIocpSocketConnection._TriggerClientRecvData(Buf: Pointer; Len: Integer);
 begin
-  Result := True;
 end;
 
-function TIocpSocketConnection._TriggerClientSentData(Buf: Pointer;
-  Len: Integer): Boolean;
+procedure TIocpSocketConnection._TriggerClientSentData(Buf: Pointer; Len: Integer);
 begin
   IoCachePool.FreeMemory(Buf);
-  Result := True;
 end;
 
 {$IFDEF __TIME_OUT_TIMER__}
@@ -1934,18 +1931,16 @@ function TIocpTcpSocket._TriggerClientRecvData(Client: TIocpSocketConnection;
   Buf: Pointer; Len: Integer): Boolean;
 begin
   TInterlocked.Add(FRecvBytes, Len);
-  Result := Client._TriggerClientRecvData(Buf, Len);
-  if Result then
-    Result := TriggerClientRecvData(Client, Buf, Len);
+  Client._TriggerClientRecvData(Buf, Len);
+  Result := TriggerClientRecvData(Client, Buf, Len);
 end;
 
 function TIocpTcpSocket._TriggerClientSentData(Client: TIocpSocketConnection;
   Buf: Pointer; Len: Integer): Boolean;
 begin
   TInterlocked.Add(FSentBytes, Len);
-  Result := Client._TriggerClientSentData(Buf, Len);
-  if Result then
-    Result := TriggerClientSentData(Client, Buf, Len);
+  Result := TriggerClientSentData(Client, Buf, Len);
+  Client._TriggerClientSentData(Buf, Len);
 end;
 
 { TIocpLineSocketConnection }
