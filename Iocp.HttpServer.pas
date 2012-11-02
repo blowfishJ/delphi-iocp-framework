@@ -10,7 +10,7 @@ uses
 
 const
   IOCP_HTTP_SERVER_VERSION  = 'IocpHttpServer/1.0';
-  IOCP_HTTP_INIT_ACCEPT_NUM = 64;
+  IOCP_HTTP_INIT_ACCEPT_NUM = 1;
 
 type
   TIocpHttpServer = class;
@@ -24,6 +24,7 @@ type
   protected
     FRawRequestText: TIocpStringStream;
     FMethod, FPath, FParams, FPathAndParams, FVersion: string;
+    FRawPath, FRawParams, FRawPathAndParams: string;
     FHttpVerNum: Integer;
     FKeepAlive: Boolean;
 
@@ -58,7 +59,8 @@ type
 
     // 所有AnswerXXXX的基础函数
     function AnswerBuf(const Header: string; Buf: Pointer; Size: Integer): Boolean; overload;
-    function AnswerStream(const Header: string; Stream: TStream): Boolean;
+    function AnswerStream(const Header: string; Stream: TStream): Boolean; overload;
+    function AnswerStream(const Status, ContType, Header: string; Stream: TStream): Boolean; overload;
 
     // 以字节数组方式返回请求
     function AnswerBytes(const Status, ContType, Header: string; Data: TBytes): Boolean; overload;
@@ -84,10 +86,14 @@ type
     function AnswerError(ErrCode: Integer): Boolean;
 
     procedure Reset;
+    function GetRequestField(const Name: string): string;
 
     property RawRequestText: TIocpStringStream read FRawRequestText;
     property RequestCmdLine: string read FRequestCmdLine;
     property Method: string read FMethod;
+    property RawPath: string read FRawPath;
+    property RawParams: string read FRawParams;
+    property RawPathAndParams: string read FRawPathAndParams;
     property Path: string read FPath;
     property Params: string read FParams;
     property PathAndParams: string read FPathAndParams;
@@ -193,6 +199,25 @@ begin
   inherited Destroy;
 end;
 
+function TIocpHttpConnection.GetRequestField(const Name: string): string;
+var
+  RequestLine: string;
+  NameSize, SpacePos: Integer;
+begin
+  NameSize := Length(Name);
+  for RequestLine in FRequestHeader do
+  begin
+    if (RequestLine = '') then Continue;
+
+    SpacePos := Pos(' ', RequestLine) + 1;
+
+    if StrLIComp(@RequestLine[1], PChar(Name + ':'), NameSize + 1) = 0 then
+     Exit(Copy(RequestLine, SpacePos, MaxInt));
+  end;
+
+  Result := '';
+end;
+
 function TIocpHttpConnection.MakeHeader(const Status, ContType,
   Header: string; ContSize: Integer): string;
 begin
@@ -257,7 +282,19 @@ begin
   while (I <= Length(FRequestCmdLine)) and (FRequestCmdLine[I] <> ' ') do
     Inc(I);
   // 请求参数及路径
-  FPathAndParams := URLDecode(Copy(FRequestCmdLine, J, I - J));
+  FRawPathAndParams := Copy(FRequestCmdLine, J, I - J);
+  FRawPath := FRawPathAndParams;
+  // 解析参数
+  J := Pos('?', FRawPath);
+  if (J <= 0) then
+    FRawParams := ''
+  else begin
+    FRawParams := Copy(FRawPath, J + 1, Length(FRawPath));
+    FRawPath   := Copy(FRawPath, 1, J - 1);
+  end;
+
+  // 请求参数及路径
+  FPathAndParams := URLDecode(FRawPathAndParams);
   // 请求路径
   FPath := FPathAndParams;
   // 解析参数
@@ -636,6 +673,15 @@ end;
 function TIocpHttpConnection.AnswerHTML(const Header, HTML: string): Boolean;
 begin
   Result := AnswerHTML(Header, RawByteString(HTML));
+end;
+
+function TIocpHttpConnection.AnswerStream(const Status, ContType,
+  Header: string; Stream: TStream): Boolean;
+var
+  Size: Integer;
+begin
+  Size := Stream.Size;
+  Result := AnswerStream(MakeHeader(Status, ContType, Header, Size), Stream);
 end;
 
 function TIocpHttpConnection.AnswerDocument(const FileName: string): Boolean;
