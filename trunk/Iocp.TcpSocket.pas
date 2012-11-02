@@ -437,6 +437,8 @@ type
     FListened: Boolean;
     FInitAcceptNum: Integer;
     FStartTick: DWORD;
+    FActive: Boolean;
+    procedure SetActive(const Value: Boolean);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -449,6 +451,7 @@ type
     property Addr: string read FAddr write FAddr;
     property Port: Word read FPort write FPort;
     property InitAcceptNum: Integer read FInitAcceptNum write FInitAcceptNum default INIT_ACCEPTEX_NUM;
+    property Active: Boolean read FActive write SetActive;
   end;
 
 procedure Register;
@@ -1115,7 +1118,8 @@ begin
   FListenThreads.Free;
   FListenThreadsLocker.Free;
   FConnectionPool.Free;
-  FPerIoDataPool.Free;
+  FPerIoDataPool.Clear;
+  FPerIoDataPool.Release;
 
   inherited Destroy;
 end;
@@ -2101,6 +2105,17 @@ begin
   inherited Destroy;
 end;
 
+procedure TSimpleIocpTcpServer.SetActive(const Value: Boolean);
+begin
+  if (FActive = Value) then Exit;
+  
+  FActive := Value;
+  if FActive then
+    Start
+  else
+    Stop;
+end;
+
 function TSimpleIocpTcpServer.Start: Boolean;
 begin
   if FListened then Exit(True);
@@ -2130,7 +2145,9 @@ initialization
   FileCachePool := TIocpMemoryPool.Create(FILE_CACHE_SIZE, MAX_FREE_HANDLE_DATA_BLOCKS);
 
 finalization
+  IoCachePool.Clear;
   IoCachePool.Release;
+  FileCachePool.Clear;
   FileCachePool.Release;
 
   Iocp.Winsock2.UninitializeWinSock;
