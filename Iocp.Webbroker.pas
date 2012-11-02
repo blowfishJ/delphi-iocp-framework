@@ -32,7 +32,7 @@ type
     constructor Create(AHttpConnection: TIocpHttpConnection);
     destructor Destroy; override;
     function GetFieldByName(const Name: AnsiString): AnsiString; override;
-    function ReadClient(var Buffer{$IFDEF CLR}: TBytes{$ENDIF}; Count: Integer): Integer; override;
+    function ReadClient(var Buffer; Count: Integer): Integer; override;
     function ReadString(Count: Integer): AnsiString; override;
     {function ReadUnicodeString(Count: Integer): string;}
     function TranslateURI(const URI: string): string; override;
@@ -63,7 +63,7 @@ type
     FExpires: TDateTime;
     FLastModified: TDateTime;
 
-    FResponseHeader: string;
+    //FResponseHeader: string;
     FSent: Boolean;
 
     function GetContent: AnsiString; override;
@@ -80,6 +80,8 @@ type
     procedure SetIntegerVariable(Index: Integer; Value: Integer); override;
     procedure SetLogMessage(const Value: string); override;
     procedure MoveCookiesAndCustomHeaders;
+  protected
+    function GetResponseHeader: string;
   public
     constructor Create(AHTTPRequest: TWebRequest; AHttpConnection: TIocpHttpConnection);
     procedure SendRedirect(const URI: AnsiString); override;
@@ -264,18 +266,11 @@ begin
   Result := AnsiString(FHttpConnection.GetRequestField(string(Name)));
 end;
 
-function TIocpWebRequest.ReadClient(var Buffer{$IFDEF CLR}: TBytes{$ENDIF};
-  Count: Integer): Integer;
+function TIocpWebRequest.ReadClient(var Buffer; Count: Integer): Integer;
 begin
-  {$IFDEF CLR}
-  Result := TIdStreamHelper.ReadBytes(FContentStream, Buffer, Count);
-  {$ELSE}
   Result := FContentStream.Read(Buffer, Count);
-  {$ENDIF}
-  // well, it shouldn't be less than 0. but let's not take chances
-  if Result < 0 then begin
+  if (Result < 0) then
     Result := 0;
-  end;
 end;
 
 function TIocpWebRequest.ReadString(Count: Integer): AnsiString;
@@ -340,6 +335,21 @@ end;
 function TIocpWebResponse.GetLogMessage: string;
 begin
   Result := '';
+end;
+
+function TIocpWebResponse.GetResponseHeader: string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to Cookies.Count - 1 do
+  begin
+    Result := 'Set-Cookie: ' + Cookies[i].HeaderValue + #13#10;
+  end;
+  for i := 0 to CustomHeaders.Count - 1 do
+  begin
+    Result := Result + CustomHeaders.Names[i] + ': ' + CustomHeaders.ValueFromIndex[i] + #13#10;
+  end;
 end;
 
 function TIocpWebResponse.GetStatusCode: Integer;
@@ -544,7 +554,7 @@ end;
 procedure TIocpWebResponse.SendRedirect(const URI: AnsiString);
 begin
   FSent := True;
-  MoveCookiesAndCustomHeaders;
+//  MoveCookiesAndCustomHeaders;
 //  FHttpConnection.
 //  FResponseInfo.Redirect(string(URI));
 end;
@@ -553,11 +563,11 @@ procedure TIocpWebResponse.SendResponse;
 begin
   FSent := True;
   // Reset to -1 so Indy will auto set it
-  MoveCookiesAndCustomHeaders;
+  //MoveCookiesAndCustomHeaders;
   if (FContent <> '') then
-    FHttpConnection.AnswerHTML('', '', FResponseHeader, FContent)
+    FHttpConnection.AnswerHTML('', ContentType, GetResponseHeader, FContent)
   else if Assigned(ContentStream) and (ContentStream.Size > 0) then
-    FHttpConnection.AnswerStream('', '', FResponseHeader, ContentStream)
+    FHttpConnection.AnswerStream('', '', GetResponseHeader, ContentStream)
 end;
 
 procedure TIocpWebResponse.SendStream(AStream: TStream);
@@ -611,7 +621,7 @@ begin
   FResponseInfo.CustomHeaders.Clear;
   FResponseInfo.CustomHeaders.AddStdValues(CustomHeaders);}
 
-  FResponseHeader := '';
+{  FResponseHeader := '';
   for i := 0 to Cookies.Count - 1 do
   begin
     FResponseHeader := 'Set-Cookie: ' + Cookies[i].HeaderValue + #13#10;
@@ -619,7 +629,7 @@ begin
   for i := 0 to CustomHeaders.Count - 1 do
   begin
     FResponseHeader := FResponseHeader + CustomHeaders.Names[i] + ': ' + CustomHeaders.ValueFromIndex[i] + #13#10;
-  end;
+  end;}
 end;
 
 { TIocpWebBrokerBridge }
