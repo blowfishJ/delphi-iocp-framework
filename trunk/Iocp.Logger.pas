@@ -143,7 +143,8 @@ function TIocpLogger.Release: Boolean;
 begin
   Result := (InterlockedDecrement(FRefCount) = 0);
 
-  if Result then Free;
+  if Result then
+    Free;
 end;
 
 procedure TIocpLogger.SetShowConsole(const Value: Boolean);
@@ -188,8 +189,9 @@ procedure TIocpLogger.AppendLog(const Log: UnicodeString; const TimeFormat: stri
 var
   LogText: UnicodeString;
 begin
+  if (AddRef = 1) then Exit;
+
   try
-    AddRef;
     if (CRLF <> '') then
       LogText := StringReplace(StringReplace(Log, #13#10, CRLF, [rfReplaceAll]),  #10, CRLF, [rfReplaceAll])
     else
@@ -214,12 +216,22 @@ end;
 
 procedure TIocpLogger.AppendLog(const Log: UnicodeString; LogType: TLogType; CRLF: string);
 begin
-  AppendLog(Log, 'HH:NN:SS:ZZZ', LogType, CRLF);
+  if (AddRef = 1) then Exit;
+  try
+    AppendLog(Log, 'HH:NN:SS:ZZZ', LogType, CRLF);
+  finally
+    Release;
+  end;
 end;
 
 procedure TIocpLogger.AppendLog(const Fmt: UnicodeString; const Args: array of const; const TimeFormat: string; LogType: TLogType; CRLF: string);
 begin
-  AppendLog(ThreadFormat(Fmt, Args), TimeFormat, LogType, CRLF);
+  if (AddRef = 1) then Exit;
+  try
+    AppendLog(ThreadFormat(Fmt, Args), TimeFormat, LogType, CRLF);
+  finally
+    Release;
+  end;
 end;
 
 function TIocpLogger.AddRef: Integer;
@@ -229,33 +241,43 @@ end;
 
 procedure TIocpLogger.AppendLog(const Fmt: UnicodeString; const Args: array of const; LogType: TLogType; CRLF: string);
 begin
-  AppendLog(ThreadFormat(Fmt, Args), LogType, CRLF);
+  if (AddRef = 1) then Exit;
+  try
+    AppendLog(ThreadFormat(Fmt, Args), LogType, CRLF);
+  finally
+    Release;
+  end;
 end;
 
 procedure TIocpLogger.AppendStrToLogFile(const S: UnicodeString; LogType: TLogType);
 var
   LogDir, LogFile: string;
 begin
-  FFileLocker[LogType].Enter;
+  if (AddRef = 1) then Exit;
   try
-    if not Assigned(FFileWriters[LogType]) or (Trunc(FFileWriters[LogType].FileTime) <> Trunc(Now)) then
-    begin
-      if Assigned(FFileWriters[LogType]) then
+    FFileLocker[LogType].Enter;
+    try
+      if not Assigned(FFileWriters[LogType]) or (Trunc(FFileWriters[LogType].FileTime) <> Trunc(Now)) then
       begin
-        FFileWriters[LogType].Flush;
-        FFileWriters[LogType].Terminate;
+        if Assigned(FFileWriters[LogType]) then
+        begin
+          FFileWriters[LogType].Flush;
+          FFileWriters[LogType].Terminate;
+        end;
+
+        LogDir := gAppPath + gAppName + '.Log\';
+        LogFile := LogDir + GetLogFileName(LogType, Now);
+        ForceDirectories(LogDir);
+        FFileWriters[LogType] := TCacheFileStream.Create(LogFile);
       end;
-
-      LogDir := gAppPath + gAppName + '.Log\';
-      LogFile := LogDir + GetLogFileName(LogType, Now);
-      ForceDirectories(LogDir);
-      FFileWriters[LogType] := TCacheFileStream.Create(LogFile);
+    finally
+      FFileLocker[LogType].Leave;
     end;
-  finally
-    FFileLocker[LogType].Leave;
-  end;
 
-  FFileWriters[LogType].AppendStr(S);
+    FFileWriters[LogType].AppendStr(S);
+  finally
+    Release;
+  end;
 end;
 
 { TCacheFileStream }
@@ -313,10 +335,14 @@ end;
 
 destructor TCacheFileStream.Destroy;
 begin
-  FCacheBufferA.Free;
-  FCacheBufferB.Free;
-  FFileStream.Free;
-  FLocker.Free;
+  if Assigned(FCacheBufferA) then
+    FreeAndNil(FCacheBufferA);
+  if Assigned(FCacheBufferB) then
+    FreeAndNil(FCacheBufferB);
+  if Assigned(FFileStream) then
+    FreeAndNil(FFileStream);
+  if Assigned(FLocker) then
+    FreeAndNil(FLocker);
 
   inherited Destroy;
 end;
@@ -334,7 +360,7 @@ begin
       Flush;
       t := GetTickCount;
     end else
-      Sleep(100);
+      SleepEx(100, True);
   end;
 
   Flush;
