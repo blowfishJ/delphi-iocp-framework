@@ -3,7 +3,7 @@ unit Iocp.Webbroker;
 interface
 
 uses
-  SysUtils, Classes, Types, Math, StrUtils, HTTPApp, WebBroker, WebReq,
+  Windows, SysUtils, Classes, Types, Math, StrUtils, HTTPApp, WebBroker, WebReq,
   Iocp.HttpServer, Iocp.HttpUtils, Iocp.Utils;
 
 type
@@ -62,8 +62,6 @@ type
     FDate: TDateTime;
     FExpires: TDateTime;
     FLastModified: TDateTime;
-
-    //FResponseHeader: string;
     FSent: Boolean;
 
     function GetContent: AnsiString; override;
@@ -79,7 +77,6 @@ type
     procedure SetDateVariable(Index: Integer; const Value: TDateTime); override;
     procedure SetIntegerVariable(Index: Integer; Value: Integer); override;
     procedure SetLogMessage(const Value: string); override;
-    procedure MoveCookiesAndCustomHeaders;
   protected
     function GetResponseHeader: string;
   public
@@ -95,7 +92,7 @@ type
     procedure RunWebModuleClass(AHttpConnection: TIocpHttpConnection);
   protected
     FWebModuleClass: TComponentClass;
-    //
+
     procedure DoOnRequest(Client: TIocpHttpConnection); override;
   public
     procedure RegisterWebModuleClass(AClass: TComponentClass);
@@ -288,8 +285,6 @@ begin
 end;
 
 function TIocpWebRequest.WriteHeaders(StatusCode: Integer; const ReasonString, Headers: AnsiString): Boolean;
-var
-  LHeader: AnsiString;
 begin
 {  FResponseInfo.ResponseNo := StatusCode;
   FResponseInfo.ResponseText := string(ReasonString);
@@ -344,12 +339,9 @@ begin
   Result := '';
   for i := 0 to Cookies.Count - 1 do
   begin
-    Result := 'Set-Cookie: ' + Cookies[i].HeaderValue + #13#10;
+    Result := 'Set-Cookie: ' + string(Cookies[i].HeaderValue) + #13#10;
   end;
-  for i := 0 to CustomHeaders.Count - 1 do
-  begin
-    Result := Result + CustomHeaders.Names[i] + ': ' + CustomHeaders.ValueFromIndex[i] + #13#10;
-  end;
+  AddCustomHeaders(Result);
 end;
 
 function TIocpWebResponse.GetStatusCode: Integer;
@@ -361,12 +353,12 @@ function OffsetFromUTC: TDateTime;
 {$IFDEF DOTNET}
   {$IFDEF USE_INLINE}inline;{$ENDIF}
 {$ELSE}
-  {$IFDEF WINDOWS}
+  {$IFDEF MSWINDOWS}
 var
   iBias: Integer;
   tmez: TTimeZoneInformation;
   {$ENDIF}
-  {$IFDEF UNIX}
+  {$IFDEF LINUX}
     {$IFDEF USE_VCL_POSIX}
 var
   T : Time_t;
@@ -387,7 +379,7 @@ var
   {$ENDIF}
 {$ENDIF}
 begin
-  {$IFDEF UNIX}
+  {$IFDEF LINUX}
 
     {$IFDEF USE_VCL_POSIX}
   {from http://edn.embarcadero.com/article/27890 }
@@ -416,10 +408,10 @@ begin
   {$IFDEF DOTNET}
   Result := System.Timezone.CurrentTimezone.GetUTCOffset(DateTime.FromOADate(Now)).TotalDays;
   {$ENDIF}
-  {$IFDEF WINDOWS}
-  case GetTimeZoneInformation({$IFDEF WINCE}@{$ENDIF}tmez) of
+  {$IFDEF MSWINDOWS}
+  case GetTimeZoneInformation(tmez) of
     TIME_ZONE_ID_INVALID  :
-      raise EIdFailedToRetreiveTimeZoneInfo.Create(RSFailedTimeZoneInfo);
+      raise Exception.Create('Failed attempting to retrieve time zone information.');
     TIME_ZONE_ID_UNKNOWN  :
        iBias := tmez.Bias;
     TIME_ZONE_ID_DAYLIGHT : begin
@@ -436,7 +428,7 @@ begin
     end
   else
     begin
-      raise EIdFailedToRetreiveTimeZoneInfo.Create(RSFailedTimeZoneInfo);
+      raise Exception.Create('Failed attempting to retrieve time zone information.');
     end;
   end;
   {We use ABS because EncodeTime will only accept positive values}
@@ -460,7 +452,6 @@ function TIocpWebResponse.GetDateVariable(Index: Integer): TDateTime;
       Result := Result - OffsetFromUTC;
   end;
 begin
-
   case Index of
     INDEX_RESP_Date             : Result := ToGMT(FDate);
     INDEX_RESP_Expires          : Result := ToGMT(FExpires);
@@ -479,7 +470,6 @@ procedure TIocpWebResponse.SetDateVariable(Index: Integer; const Value: TDateTim
       Result := Result + OffsetFromUTC;
   end;
 begin
-
   case Index of
     INDEX_RESP_Date             : FDate := ToLocal(Value);
     INDEX_RESP_Expires          : FExpires := ToLocal(Value);
@@ -554,20 +544,19 @@ end;
 procedure TIocpWebResponse.SendRedirect(const URI: AnsiString);
 begin
   FSent := True;
-//  MoveCookiesAndCustomHeaders;
-//  FHttpConnection.
-//  FResponseInfo.Redirect(string(URI));
+  SetCustomHeader('Location', string(URI));
 end;
 
 procedure TIocpWebResponse.SendResponse;
+var
+  LStatusStr: string;
 begin
   FSent := True;
-  // Reset to -1 so Indy will auto set it
-  //MoveCookiesAndCustomHeaders;
+  LStatusStr := IntToStr(StatusCode) + ' ' + string(StatusString(StatusCode));
   if (FContent <> '') then
-    FHttpConnection.AnswerHTML('', ContentType, GetResponseHeader, FContent)
+    FHttpConnection.AnswerHTML(LStatusStr, string(ContentType), GetResponseHeader, FContent)
   else if Assigned(ContentStream) and (ContentStream.Size > 0) then
-    FHttpConnection.AnswerStream('', '', GetResponseHeader, ContentStream)
+    FHttpConnection.AnswerStream(LStatusStr, string(ContentType), GetResponseHeader, ContentStream)
 end;
 
 procedure TIocpWebResponse.SendStream(AStream: TStream);
@@ -599,37 +588,6 @@ procedure TIocpWebResponse.SetContentStream(AValue: TStream);
 begin
   inherited;
 //  FResponseInfo.ContentStream := AValue;
-end;
-
-procedure TIocpWebResponse.MoveCookiesAndCustomHeaders;
-var
-  i: Integer;
-  LSrcCookie: TCookie;
-//  LDestCookie: TIdCookie;
-begin
-{  for i := 0 to Cookies.Count - 1 do begin
-    LSrcCookie := Cookies[i];
-    LDestCookie := FResponseInfo.Cookies.Add;
-    LDestCookie.CookieName := String(HTTPEncode(LSrcCookie.Name));
-    LDestCookie.Value := String(HTTPEncode(LSrcCookie.Value));
-    LDestCookie.Domain := String(LSrcCookie.Domain);
-    LDestCookie.Path := String(LSrcCookie.Path);
-    LDestCookie.Expires := LSrcCookie.Expires;
-    LDestCookie.Secure := LSrcCookie.Secure;
-
-  end;
-  FResponseInfo.CustomHeaders.Clear;
-  FResponseInfo.CustomHeaders.AddStdValues(CustomHeaders);}
-
-{  FResponseHeader := '';
-  for i := 0 to Cookies.Count - 1 do
-  begin
-    FResponseHeader := 'Set-Cookie: ' + Cookies[i].HeaderValue + #13#10;
-  end;
-  for i := 0 to CustomHeaders.Count - 1 do
-  begin
-    FResponseHeader := FResponseHeader + CustomHeaders.Names[i] + ': ' + CustomHeaders.ValueFromIndex[i] + #13#10;
-  end;}
 end;
 
 { TIocpWebBrokerBridge }
