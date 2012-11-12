@@ -14,7 +14,7 @@ unit Iocp.VariantPacket;
 interface
 
 uses
-  Windows, Classes, SysUtils, System.Generics.Collections, Variants, VarUtils;
+  Classes, SysUtils, System.Generics.Collections, Variants, VarUtils;
 
 type
   // 使用OleVariant，现在连字符串数组的可变类型都能支持了
