@@ -226,7 +226,7 @@ begin
   if (Status = '') then
     Result := Result + FVersion + ' 200 OK' + #13#10
   else
-    Result := Result + FVersion + Status + #13#10;
+    Result := Result + FVersion + ' ' + Status + #13#10;
 
   if (ContType = '') then
     Result := Result + 'Content-Type: text/html' + #13#10
