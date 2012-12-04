@@ -160,6 +160,7 @@ type
 
     // ¥ø“Ï≤Ω∑¢ÀÕ
     function Send(Buf: Pointer; Size: Integer): Integer; overload; virtual;
+    function Send(const Buf; Size: Integer): Integer; overload;
     function Send(const Bytes: TBytes): Integer; overload;
     function Send(const s: RawByteString): Integer; overload;
     function Send(const s: string): Integer; overload;
@@ -666,6 +667,11 @@ end;
 function TIocpSocketConnection.Send(Buf: Pointer; Size: Integer): Integer;
 begin
   Result := _Send(Buf, Size);
+end;
+
+function TIocpSocketConnection.Send(const Buf; Size: Integer): Integer;
+begin
+  Result := Send(@Buf, Size);
 end;
 
 function TIocpSocketConnection.Send(const Bytes: TBytes): Integer;
