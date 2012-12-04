@@ -13,6 +13,11 @@
     <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
         <Base>true</Base>
     </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='OSX32' and '$(Base)'=='true') or '$(Base_OSX32)'!=''">
+        <Base_OSX32>true</Base_OSX32>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
     <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Base)'=='true') or '$(Base_Win32)'!=''">
         <Base_Win32>true</Base_Win32>
         <CfgParent>Base</CfgParent>
@@ -53,15 +58,18 @@
         <DCC_F>false</DCC_F>
         <DCC_K>false</DCC_K>
     </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_OSX32)'!=''">
+        <DCC_UsePackage>DbxCommonDriver;dbrtl;DataSnapCommon;DbxClientDriver;CustomIPTransport;dbexpress;dsnap;DataSnapServer;$(DCC_UsePackage)</DCC_UsePackage>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
-        <DCC_UsePackage>vcl;$(DCC_UsePackage)</DCC_UsePackage>
+        <DCC_UsePackage>vcl;DbxCommonDriver;dbrtl;DataSnapCommon;DbxClientDriver;CustomIPTransport;dbexpress;dsnap;DataSnapServer;$(DCC_UsePackage)</DCC_UsePackage>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
-        <DCC_UsePackage>vcl;$(DCC_UsePackage)</DCC_UsePackage>
+        <DCC_UsePackage>vcl;DbxCommonDriver;dbrtl;DataSnapCommon;DbxClientDriver;CustomIPTransport;dbexpress;dsnap;DataSnapServer;$(DCC_UsePackage)</DCC_UsePackage>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
@@ -85,6 +93,14 @@
         </DelphiCompile>
         <DCCReference Include="rtl.dcp"/>
         <DCCReference Include="vcl.dcp"/>
+        <DCCReference Include="DbxCommonDriver.dcp"/>
+        <DCCReference Include="dbrtl.dcp"/>
+        <DCCReference Include="DataSnapCommon.dcp"/>
+        <DCCReference Include="DbxClientDriver.dcp"/>
+        <DCCReference Include="CustomIPTransport.dcp"/>
+        <DCCReference Include="dbexpress.dcp"/>
+        <DCCReference Include="dsnap.dcp"/>
+        <DCCReference Include="DataSnapServer.dcp"/>
         <DCCReference Include="..\Iocp.Winsock2.pas"/>
         <DCCReference Include="..\Iocp.Wship6.pas"/>
         <DCCReference Include="..\Iocp.ApiFix.pas"/>
@@ -108,6 +124,7 @@
         <DCCReference Include="..\Iocp.Utils.pas"/>
         <DCCReference Include="..\Iocp.VariantPacket.pas"/>
         <DCCReference Include="..\Iocp.VariantSocket.pas"/>
+        <DCCReference Include="..\Datasnap\Iocp.DSTCPServerTransport.pas"/>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>

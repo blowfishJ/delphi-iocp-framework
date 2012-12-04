@@ -29,7 +29,15 @@ package IocpXE3;
 
 requires
   rtl,
-  vcl;
+  vcl,
+  DbxCommonDriver,
+  dbrtl,
+  DataSnapCommon,
+  DbxClientDriver,
+  CustomIPTransport,
+  dbexpress,
+  dsnap,
+  DataSnapServer;
 
 contains
   Iocp.Winsock2 in '..\Iocp.Winsock2.pas',
@@ -54,6 +62,7 @@ contains
   Iocp.TimerQueue in '..\Iocp.TimerQueue.pas',
   Iocp.Utils in '..\Iocp.Utils.pas',
   Iocp.VariantPacket in '..\Iocp.VariantPacket.pas',
-  Iocp.VariantSocket in '..\Iocp.VariantSocket.pas';
+  Iocp.VariantSocket in '..\Iocp.VariantSocket.pas',
+  Iocp.DSTCPServerTransport in '..\Datasnap\Iocp.DSTCPServerTransport.pas';
 
 end.
