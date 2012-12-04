@@ -1,3 +1,11 @@
+{*******************************************************}
+{                                                       }
+{     Delphi DataSnap Framework Iocp Http WebBroker     }
+{                                                       }
+{                 soulawing@gmail.com                   }
+{                                                       }
+{*******************************************************}
+
 unit Iocp.DSHTTPWebBroker;
 
 interface

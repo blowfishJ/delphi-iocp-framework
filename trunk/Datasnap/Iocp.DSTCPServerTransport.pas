@@ -1,8 +1,8 @@
 {*******************************************************}
 {                                                       }
-{               Delphi DataSnap Framework               }
+{     Delphi DataSnap Framework Iocp Tcp Transport      }
 {                                                       }
-{ Copyright(c) 1995-2012 Embarcadero Technologies, Inc. }
+{                 soulawing@gmail.com                   }
 {                                                       }
 {*******************************************************}
 
