@@ -30,6 +30,8 @@ type
     function GetName(Index: Integer): string;
     function GetVariant(Index: Integer): OleVariant;
     procedure SetVariant(Index: Integer; const Value: OleVariant);
+  protected
+    function VarNull(const V: OleVariant): OleVariant;
   public
     procedure Assign(Source: TParams);
     function ParamsToStr: string;
@@ -115,6 +117,7 @@ end;
 function TParams.GetItem(const Key: string): OleVariant;
 begin
   TryGetValue(Key, Result);
+  Result := VarNull(Result);
 end;
 
 function TParams.GetName(Index: Integer): string;
@@ -140,7 +143,7 @@ begin
 
   for Value in Values do
   begin
-    if (Index = 0) then Exit(Value);
+    if (Index = 0) then Exit(VarNull(Value));
     Dec(Index);
   end;
 end;
@@ -164,6 +167,14 @@ begin
     end;
     Dec(Index);
   end;
+end;
+
+function TParams.VarNull(const V: OleVariant): OleVariant;
+begin
+  if not VarIsNull(V) then
+    Result := V
+  else
+    Result := Unassigned;
 end;
 
 function TParams.ParamsToStr: string;
@@ -485,7 +496,8 @@ begin
   // 写入命令（长度1字节-字符窜序列）
   b := Byte(Length(Self.Cmd));
   Stream.Write(b, SizeOf(b));
-  Stream.Write(Self.Cmd[1], b * SizeOf(Char));
+  if (b > 0) then
+    Stream.Write(Self.Cmd[1], b * SizeOf(Char));
 
   // 写入参数个数（1字节）
   b := Byte(Self.Params.Count);
