@@ -3,7 +3,7 @@ unit Iocp.ObjectPool;
 interface
 
 uses
-  Classes, SysUtils, SyncObjs;
+  Classes, Types, SysUtils, SyncObjs;
 
 type
   TIocpObject = class

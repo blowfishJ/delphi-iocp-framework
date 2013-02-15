@@ -5,7 +5,7 @@ unit Iocp.MemoryPool;
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, Iocp.Logger;
+  Windows, Types, Classes, SysUtils, SyncObjs, Iocp.Logger;
 
 type
   TIocpMemoryPool = class
