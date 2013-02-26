@@ -481,7 +481,7 @@ var
   begin
     b := Byte(Length(ParamName));
     Stream.Write(b, SizeOf(b));
-    Stream.Write(ParamName[1], b * SizeOf(Char));
+    Stream.Write(Pointer(ParamName)^, b * SizeOf(Char));
 
     PackVariant(v, Stream);
   end;
@@ -497,7 +497,7 @@ begin
   b := Byte(Length(Self.Cmd));
   Stream.Write(b, SizeOf(b));
   if (b > 0) then
-    Stream.Write(Self.Cmd[1], b * SizeOf(Char));
+    Stream.Write(Pointer(Self.Cmd)^, b * SizeOf(Char));
 
   // 写入参数个数（1字节）
   b := Byte(Self.Params.Count);
@@ -543,7 +543,7 @@ var
     SetLength(pname, b);
 
     // 读取参数名字符串序列
-    Stream.Read(pname[1], b * SizeOf(Char));
+    Stream.Read(Pointer(pname)^, b * SizeOf(Char));
     v := ExtractVariant(Stream);
     Self.Params.Add(pname, v);
   end;
@@ -568,7 +568,7 @@ begin
   // 读取命令数据
   Stream.Read(b, SizeOf(b));
   SetLength(Self.FCmd, b);
-  Stream.Read(Self.FCmd[1], b * SizeOf(Char));
+  Stream.Read(Pointer(Self.FCmd)^, b * SizeOf(Char));
 
   // 读取参数个数
   Stream.Read(b, SizeOf(b));
