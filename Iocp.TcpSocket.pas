@@ -495,11 +495,7 @@ begin
 
   // 如果Socket还没关闭，则需要关闭，否则会造成句柄泄露
   // 这种情况发生在远端主动断开连接
-  if (InterlockedExchange(FDisconnected, 1) = 0) then
-    Owner.CloseSocket(FSocket);
-
-  Owner._TriggerClientDisconnected(Self);
-  Owner.FreeConnection(Self);
+  Disconnect;
 end;
 
 procedure TIocpSocketConnection.Disconnect;
@@ -507,7 +503,8 @@ begin
   if (InterlockedExchange(FDisconnected, 1) <> 0) then Exit;
 
   Owner.CloseSocket(FSocket);
-  Release;
+  Owner._TriggerClientDisconnected(Self);
+  Owner.FreeConnection(Self);
 end;
 
 procedure TIocpSocketConnection.DecPendingRecv;
