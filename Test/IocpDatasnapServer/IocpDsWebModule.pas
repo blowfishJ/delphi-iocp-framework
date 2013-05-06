@@ -5,7 +5,7 @@ interface
 uses
   System.SysUtils, System.Classes, Web.HTTPApp, Datasnap.DSHTTPCommon,
   Datasnap.DSHTTPWebBroker, Datasnap.DSServer,
-  Web.WebFileDispatcher, Web.HTTPProd, DSAuth,
+  Web.WebFileDispatcher, Web.HTTPProd, DSAuth, Datasnap.DSProxyDispatcher,
   Datasnap.DSProxyJavaScript, IPPeerServer, Datasnap.DSMetadata,
   Datasnap.DSServerMetadata, Datasnap.DSClientMetadata, Datasnap.DSCommonServer,
   Data.DBCommonTypes, Data.DBXCommon, DbxCompressionFilter, Datasnap.DSHTTP;
@@ -21,6 +21,7 @@ type
     DSProxyGenerator1: TDSProxyGenerator;
     DSServerMetaDataProvider1: TDSServerMetaDataProvider;
     DSAuthenticationManager1: TDSAuthenticationManager;
+    DSProxyDispatcher1: TDSProxyDispatcher;
     procedure DSServerClass1GetClass(DSServerClass: TDSServerClass;
       var PersistentClass: TPersistentClass);
     procedure ServerFunctionInvokerHTMLTag(Sender: TObject; Tag: TTag;
@@ -136,6 +137,13 @@ end;
 
 procedure TWebModuleEs.WebModuleCreate(Sender: TObject);
 begin
+  DSServerMetaDataProvider1.Server := DSServer1;
+  DSHTTPWebDispatcher1.Server := DSServer1;
+  if DSServer1.Started then
+  begin
+    DSHTTPWebDispatcher1.DbxContext := DSServer1.DbxContext;
+    DSHTTPWebDispatcher1.Start;
+  end;
   FServerFunctionInvokerAction := ActionByName('ServerFunctionInvokerAction');
 end;
 
