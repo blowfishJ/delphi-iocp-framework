@@ -193,7 +193,10 @@ begin
 
   // 给所有工作线程发送退出命令
   for i := 0 to High(FThreads) do
+  begin
     Iocp.ApiFix.PostQueuedCompletionStatus(FIocpHandle, 0, ULONG_PTR(Self), POverLapped(SHUTDOWN_FLAG));
+    SleepEx(10, True);
+  end;
 
   // 等待工作线程结束
   WaitForMultipleObjects(Length(FThreadHandles), Pointer(FThreadHandles), True, INFINITE);
