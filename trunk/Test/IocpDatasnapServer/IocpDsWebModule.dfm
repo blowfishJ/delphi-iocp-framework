@@ -22,7 +22,7 @@ object WebModuleEs: TWebModuleEs
   Height = 333
   Width = 414
   object DSServer1: TDSServer
-    Left = 96
+    Left = 64
     Top = 11
   end
   object DSHTTPWebDispatcher1: TDSHTTPWebDispatcher
@@ -33,30 +33,29 @@ object WebModuleEs: TWebModuleEs
         Properties.Strings = (
           'CompressMoreThan=1024')
       end>
-    AuthenticationManager = DSAuthenticationManager1
     SessionTimeout = 5000
     WebDispatch.MethodType = mtAny
     WebDispatch.PathInfo = 'datasnap*'
-    Left = 96
+    Left = 64
     Top = 75
   end
   object DSServerClass1: TDSServerClass
     OnGetClass = DSServerClass1GetClass
     Server = DSServer1
-    Left = 200
+    Left = 216
     Top = 11
   end
   object ServerFunctionInvoker: TPageProducer
     HTMLFile = 'Templates\ServerFunctionInvoker.html'
     OnHTMLTag = ServerFunctionInvokerHTMLTag
-    Left = 56
+    Left = 64
     Top = 184
   end
   object ReverseString: TPageProducer
     HTMLFile = 'templates\ReverseString.html'
     OnHTMLTag = ServerFunctionInvokerHTMLTag
-    Left = 168
-    Top = 184
+    Left = 216
+    Top = 120
   end
   object WebFileDispatcher1: TWebFileDispatcher
     WebFileExtensions = <
@@ -95,25 +94,30 @@ object WebModuleEs: TWebModuleEs
         DirectoryMask = '\templates\*'
       end>
     RootDirectory = '.'
-    Left = 56
+    Left = 64
     Top = 136
   end
   object DSProxyGenerator1: TDSProxyGenerator
     ExcludeClasses = 'DSMetadata'
     MetaDataProvider = DSServerMetaDataProvider1
     Writer = 'Java Script REST'
-    Left = 48
+    Left = 64
     Top = 248
   end
   object DSServerMetaDataProvider1: TDSServerMetaDataProvider
     Server = DSServer1
-    Left = 208
+    Left = 216
     Top = 248
   end
   object DSAuthenticationManager1: TDSAuthenticationManager
     OnUserAuthenticate = DSAuthenticationManager1UserAuthenticate
     Roles = <>
-    Left = 248
-    Top = 128
+    Left = 216
+    Top = 56
+  end
+  object DSProxyDispatcher1: TDSProxyDispatcher
+    DSProxyGenerator = DSProxyGenerator1
+    Left = 216
+    Top = 192
   end
 end

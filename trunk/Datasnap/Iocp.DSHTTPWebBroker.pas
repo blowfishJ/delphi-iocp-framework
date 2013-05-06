@@ -227,7 +227,7 @@ begin
     INDEX_ProtocolVersion : Result := AnsiString(FHttpConnection.Version);
     //INDEX_URL             : Result := AnsiString(FRequestInfo.Document);
     INDEX_URL             : Result := AnsiString(''); // Root - consistent with ISAPI which return path to root
-    INDEX_Query           : Result := AnsiString(FHttpConnection.RequestCmdLine);
+    INDEX_Query           : Result := AnsiString(FHttpConnection.Params);
     INDEX_PathInfo        : Result := AnsiString(FHttpConnection.Path);
     INDEX_PathTranslated  : Result := AnsiString(FHttpConnection.Path);             // it's not clear quite what should be done here - we can't translate to a path
     INDEX_CacheControl    : Result := AnsiString(GetFieldByName('Cache-Control'));   {do not localize}

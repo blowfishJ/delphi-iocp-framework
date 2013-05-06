@@ -616,9 +616,9 @@ function DSAdmin(connectionInfo)
   };
 }
 
-function TServerMethodsEs(connectionInfo)
+function TServerMethodsDs(connectionInfo)
 {
-  this.executor = new ServerFunctionExecutor("TServerMethodsEs",connectionInfo);
+  this.executor = new ServerFunctionExecutor("TServerMethodsDs",connectionInfo);
 
   /*
    * @param Value [in] - Type on server: string
@@ -667,6 +667,6 @@ function TServerMethodsEs(connectionInfo)
 
 var JSProxyClassList = {
   "DSAdmin": ["GetPlatformName","ClearResources","FindPackages","FindClasses","FindMethods","CreateServerClasses","DropServerClasses","CreateServerMethods","DropServerMethods","GetServerClasses","ListClasses","DescribeClass","ListMethods","DescribeMethod","GetServerMethods","GetServerMethodParameters","GetDatabaseConnectionProperties","GetDSServerName","ConsumeClientChannel","ConsumeClientChannelTimeout","CloseClientChannel","RegisterClientCallbackServer","UnregisterClientCallback","BroadcastToChannel","BroadcastObjectToChannel","NotifyCallback","NotifyObject"],
-  "TServerMethodsEs": ["EchoString","ReverseString"]
+  "TServerMethodsDs": ["EchoString","ReverseString"]
 };
 
