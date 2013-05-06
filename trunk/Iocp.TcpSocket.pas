@@ -251,6 +251,7 @@ type
   }
   TIocpTcpSocket = class(TComponent)
   private
+    FShutdown: Boolean;
     FIocpHandle: THandle;
     FIoThreadsNumber: Integer;
     FIoThreads: array of TIocpIoThread;
@@ -1563,6 +1564,8 @@ var
   LocalAddrLen, RemoteAddrLen: Integer;
   PLocalAddr, PRemoteAddr: PSockAddr;
 begin
+  if FShutdown then Exit;
+  
   try
     // 将连接放到工作连接列表中
     try
@@ -1642,6 +1645,8 @@ end;
 
 procedure TIocpTcpSocket.RequestConnectComplete(Connection: TIocpSocketConnection);
 begin
+  if FShutdown then Exit;
+
   try
     try
       if not Connection.InitSocket then
@@ -1817,12 +1822,14 @@ begin
 
   FSentBytes := 0;
   FRecvBytes := 0;
+  FShutdown := False;
 end;
 
 procedure TIocpTcpSocket.ShutdownWorkers;
 var
   i: Integer;
 begin
+  FShutdown := True;
   if (FIocpHandle = 0) then Exit;
 
   // 断开所有连接
@@ -1836,7 +1843,7 @@ begin
   // 这里必须加上Sleep，以保证所有断开连接的命令比后面退出线程的命令先进入IOCP队列
   // 否则可能会出现连接还没全部释放，线程就被终止了，造成资源泄漏
   while ((FConnectionList.Count > 0) or (FIdleConnectionList.Count > 0)) do
-    Sleep(10);
+    SleepEx(10, True);
 
   // 关闭监听线程
   FListenThreadsLocker.Enter;
@@ -1850,7 +1857,10 @@ begin
 
   // 关闭IO线程
   for i := Low(FIoThreads) to High(FIoThreads) do
+  begin
     Iocp.ApiFix.PostQueuedCompletionStatus(FIocpHandle, 0, 0, POverlapped(SHUTDOWN_FLAG));
+    SleepEx(10, True);
+  end;
 
   // 等待IO线程结束
   WaitForMultipleObjects(Length(FIoThreadHandles), Pointer(FIoThreadHandles), True, INFINITE);
