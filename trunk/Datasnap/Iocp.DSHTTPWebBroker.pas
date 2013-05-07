@@ -551,20 +551,28 @@ end;
 
 procedure TIocpWebResponse.SendRedirect(const URI: AnsiString);
 begin
-  FSent := True;
   SetCustomHeader('Location', string(URI));
+  SendResponse;
 end;
 
 procedure TIocpWebResponse.SendResponse;
+  function ReasonStr: string;
+  begin
+    Result := string(ReasonString);
+    if (Result = '') then
+      Result := string(StatusString(StatusCode));
+  end;
 var
   LStatusStr: string;
 begin
-  FSent := True;
-  LStatusStr := IntToStr(StatusCode) + ' ' + string(StatusString(StatusCode));
+  LStatusStr := IntToStr(StatusCode) + ' ' + ReasonStr;
   if (FContent <> '') then
-    FHttpConnection.AnswerHTML(LStatusStr, string(ContentType), GetResponseHeader, FContent)
+    FSent := FHttpConnection.AnswerHTML(LStatusStr, string(ContentType), GetResponseHeader, FContent)
   else if Assigned(ContentStream) and (ContentStream.Size > 0) then
-    FHttpConnection.AnswerStream(LStatusStr, string(ContentType), GetResponseHeader, ContentStream)
+    FSent := FHttpConnection.AnswerStream(LStatusStr, string(ContentType), GetResponseHeader, ContentStream)
+  else
+    FSent := FHttpConnection.AnswerHTML(LStatusStr, string(ContentType), GetResponseHeader,
+      '<HTML><BODY><B>' + LStatusStr + '</B></BODY></HTML>')
 end;
 
 procedure TIocpWebResponse.SendStream(AStream: TStream);
@@ -683,17 +691,21 @@ end;
 
 procedure TIocpWebBrokerBridge.DoOnRequest(Client: TIocpHttpConnection);
 begin
-  if FWebModuleClass <> nil then
-  begin
-    // FWebModuleClass, RegisterWebModuleClass supported for backward compatability
-    RunWebModuleClass(Client)
-  end else
-  begin
-    {$IFDEF HAS_CLASSVARS}
-    TIocpWebBrokerBridgeRequestHandler.FWebRequestHandler.Run(Client);
-    {$ELSE}
-    IocpWebRequestHandler.Run(Client);
-    {$ENDIF}
+  try
+    if FWebModuleClass <> nil then
+    begin
+      // FWebModuleClass, RegisterWebModuleClass supported for backward compatability
+      RunWebModuleClass(Client)
+    end else
+    begin
+      {$IFDEF HAS_CLASSVARS}
+      TIocpWebBrokerBridgeRequestHandler.FWebRequestHandler.Run(Client);
+      {$ELSE}
+      IocpWebRequestHandler.Run(Client);
+      {$ENDIF}
+    end;
+  except
+    Client.Disconnect;
   end;
 end;
 
