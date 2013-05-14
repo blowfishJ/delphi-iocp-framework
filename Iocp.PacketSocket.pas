@@ -20,20 +20,23 @@ type
     Data: Pointer;
   end;
 
-  // 使用Send(Stream)可能会产生多个Packet发送
   TIocpPacketConnection = class(TIocpSocketConnection)
   private
     FRecvPacketBytes: Integer;
     FRecvPacket: PIocpPacket;
 
+    function CalcCrc32(const Buf; const BufSize: Integer): LongWord; overload;
+    function CalcCrc32(Stream: TStream): LongWord; overload;
     function CalcHeaderCrc(const Header: TIocpHeader): LongWord;
-    function PackData(Buf: Pointer; Len: Integer): TIocpPacket;
+    function MakeHeader(Buf: Pointer; Len: Integer): TIocpHeader; overload;
+    function MakeHeader(Stream: TStream): TIocpHeader; overload;
     function CheckHeaderCrc(const Header: TIocpHeader): Boolean;
     function CheckDataCrc(const Packet: TIocpPacket): Boolean;
   protected
     procedure Initialize; override;
   public
-    function Send(Buf: Pointer; Size: Integer): Integer; override;
+    function Send(Buf: Pointer; Size: Integer): Integer; overload; override;
+    function Send(Stream: TStream): Integer; overload; override;
   end;
 
   {
@@ -107,7 +110,16 @@ begin
   RegisterComponents('Iocp', [TIocpPacketSocket, TIocpPacketServer]);
 end;
 
-function CalcCrc32(const Buf; const BufSize: Integer): LongWord;
+{ TIocpPacketConnection }
+
+procedure TIocpPacketConnection.Initialize;
+begin
+  inherited Initialize;
+  FRecvPacketBytes := 0;
+  ZeroMemory(@FRecvPacket, SizeOf(FRecvPacket));
+end;
+
+function TIocpPacketConnection.CalcCrc32(const Buf; const BufSize: Integer): LongWord;
 var
   I: Integer;
   P: PByte;
@@ -121,13 +133,14 @@ begin
   end;
 end;
 
-{ TIocpPacketConnection }
-
-procedure TIocpPacketConnection.Initialize;
+function TIocpPacketConnection.CalcCrc32(Stream: TStream): LongWord;
+var
+  B: Byte;
 begin
-  inherited Initialize;
-  FRecvPacketBytes := 0;
-  ZeroMemory(@FRecvPacket, SizeOf(FRecvPacket));
+  Result := 0;
+  Stream.Position := 0;
+  while (Stream.Read(B, SizeOf(Byte)) > 0) do
+    Inc(Result, B)
 end;
 
 function TIocpPacketConnection.CalcHeaderCrc(const Header: TIocpHeader): LongWord;
@@ -135,17 +148,21 @@ begin
   Result := CalcCrc32((PAnsiChar(@Header) + SizeOf(Header.HeaderCrc32))^, SizeOf(Header) - SizeOf(Header.HeaderCrc32));
 end;
 
-function TIocpPacketConnection.PackData(Buf: Pointer;
-  Len: Integer): TIocpPacket;
+function TIocpPacketConnection.MakeHeader(Stream: TStream): TIocpHeader;
 begin
-  with Result do
-  begin
-    Header.DataCrc32 := CalcCrc32(Buf^, Len);
-    Header.Tick := GetTickCount;
-    Header.DataSize := Len;
-    Data := Buf;
-    Header.HeaderCrc32 := CalcHeaderCrc(Header);
-  end;
+  Result.DataCrc32 := CalcCrc32(Stream);
+  Result.Tick := GetTickCount;
+  Result.DataSize := Stream.Size;
+  Result.HeaderCrc32 := CalcHeaderCrc(Result);
+end;
+
+function TIocpPacketConnection.MakeHeader(Buf: Pointer;
+  Len: Integer): TIocpHeader;
+begin
+  Result.DataCrc32 := CalcCrc32(Buf^, Len);
+  Result.Tick := GetTickCount;
+  Result.DataSize := Len;
+  Result.HeaderCrc32 := CalcHeaderCrc(Result);
 end;
 
 function TIocpPacketConnection.CheckHeaderCrc(const Header: TIocpHeader): Boolean;
@@ -160,13 +177,24 @@ end;
 
 function TIocpPacketConnection.Send(Buf: Pointer; Size: Integer): Integer;
 var
-  Packet: TIocpPacket;
+  Header: TIocpHeader;
 begin
-  Packet := PackData(Buf, Size);
-  if (inherited Send(@Packet.Header, SizeOf(Packet.Header)) < 0) then Exit(-1);
-  if (inherited Send(Packet.Data, Packet.Header.DataSize) < 0) then Exit(-2);
+  Header := MakeHeader(Buf, Size);
+  if (inherited Send(@Header, SizeOf(Header)) < 0) then Exit(-1);
+  if (inherited Send(Buf, Size) < 0) then Exit(-2);
 
   Result := Size;
+end;
+
+function TIocpPacketConnection.Send(Stream: TStream): Integer;
+var
+  Header: TIocpHeader;
+begin
+  Header := MakeHeader(Stream);
+  if (inherited Send(@Header, SizeOf(Header)) < 0) then Exit(-1);
+  if (inherited Send(Stream) < 0) then Exit(-2);
+
+  Result := Stream.Size;
 end;
 
 { TIocpPacketRequest }
