@@ -55,7 +55,6 @@ type
   TAddrUnion = record
     case Integer of
       0: (IPv4: TSockAddrIn);
-      // 这个Buffer只用于AcceptEx保存终端地址数据，大小为2倍地址结构
       1: (IPv6: TSockAddrIn6);
   end;
 
@@ -164,7 +163,7 @@ type
     function Send(const Bytes: TBytes): Integer; overload;
     function Send(const s: RawByteString): Integer; overload;
     function Send(const s: string): Integer; overload;
-    function Send(Stream: TStream): Integer; overload;
+    function Send(Stream: TStream): Integer; overload; virtual;
 
     property Owner: TIocpTcpSocket read GetOwner;
     property Socket: TSocket read FSocket;
@@ -1828,6 +1827,7 @@ end;
 procedure TIocpTcpSocket.ShutdownWorkers;
 var
   i: Integer;
+  LTick, LTimeout: LongWord;
 begin
   FShutdown := True;
   if (FIocpHandle = 0) then Exit;
@@ -1840,10 +1840,19 @@ begin
   FTimerQueue.Release;
   {$ENDIF}
 
+  if (FTimeout > 0) and (FTimeout < 5000) then
+    LTimeout := FTimeout
+  else
+    LTimeout := 5000;
+
   // 这里必须加上Sleep，以保证所有断开连接的命令比后面退出线程的命令先进入IOCP队列
   // 否则可能会出现连接还没全部释放，线程就被终止了，造成资源泄漏
+  LTick := GetTickCount;
   while ((FConnectionList.Count > 0) or (FIdleConnectionList.Count > 0)) do
+  begin
     SleepEx(10, True);
+    if (CalcTickDiff(LTick, GetTickCount) > LTimeout) then Break;
+  end;
 
   // 关闭监听线程
   FListenThreadsLocker.Enter;
@@ -1863,7 +1872,7 @@ begin
   end;
 
   // 等待IO线程结束
-  WaitForMultipleObjects(Length(FIoThreadHandles), Pointer(FIoThreadHandles), True, INFINITE);
+  WaitForMultipleObjects(Length(FIoThreadHandles), Pointer(FIoThreadHandles), True, LTimeout);
   SetLength(FIoThreads, 0);
   SetLength(FIoThreadHandles, 0);
 
@@ -1871,6 +1880,8 @@ begin
   CloseHandle(FIocpHandle);
   FIocpHandle := 0;
 
+  FConnectionList.Clear;
+  FIdleConnectionList.Clear;
   FConnectionPool.Clear;
   FPerIoDataPool.Clear;
 
