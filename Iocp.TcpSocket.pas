@@ -1286,6 +1286,7 @@ begin
 
     // 生成新的连接对象并绑定到IOCP
     Connection := AllocConnection(ClientSocket);
+    Connection.Tag := Tag; // thanks Hezihang2012
     if not AssociateSocketWithCompletionPort(ClientSocket, Connection) then
     begin
       Iocp.Winsock2.CloseSocket(ClientSocket);
@@ -1296,7 +1297,6 @@ begin
     if (Connection.AddRef = 1) then Exit;
 
     Connection.FIsIPv6 := (POutAddrInfo.ai_family = AF_INET6);
-    Connection.Tag := Tag;
     ExtractAddrInfo(POutAddrInfo.ai_addr, POutAddrInfo.ai_addrlen, Connection.FRemoteIP, Connection.FRemotePort);
     PerIoData := AllocIoData(ClientSocket, iotConnect);
     if not ConnectEx(ClientSocket, POutAddrInfo.ai_addr, POutAddrInfo.ai_addrlen, nil, 0, PCardinal(0)^, PWSAOverlapped(PerIoData)) and
