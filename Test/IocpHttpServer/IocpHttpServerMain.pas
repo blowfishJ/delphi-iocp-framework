@@ -112,7 +112,7 @@ procedure TfmIocpHttpServer.btnSelectDirClick(Sender: TObject);
 var
   Dir: string;
 begin
-  if SelectDirectory('选择根目录', '', Dir) then
+  if SelectDirectory('Select the root directory', '', Dir) then
     edtSelectDir.Text := Dir;
 end;
 
@@ -120,7 +120,7 @@ procedure TfmIocpHttpServer.btnStartClick(Sender: TObject);
 begin
   if (edtPort.Text = '') then
   begin
-    zMsgWarning(Handle, '配置不完整');
+    zMsgWarning(Handle, 'Configuration is not complete');
     Exit;
   end;
 
@@ -162,9 +162,9 @@ end;
 procedure TfmIocpHttpServer.FormCreate(Sender: TObject);
 begin
   {$ifdef WIN64}
-  Caption := Caption + '(x64)';
+  Caption := Caption + ' (x64)';
   {$else}
-  Caption := Caption + '(x86)';
+  Caption := Caption + ' (x86)';
   {$endif}
   FServer := TTestIocpHttpServer.Create(nil);
 end;
@@ -190,7 +190,7 @@ procedure TfmIocpHttpServer.UpdateInfo;
     begin
       t := CalcTickDiff(LastTick, GetTickCount);
       if (t > 0) then
-        Result := Result + ', ' + BytesToStr(Round((NowBytes-LastBytes)/t)*1000) + '/秒';
+        Result := Result + ', ' + BytesToStr(Round((NowBytes-LastBytes)/t)*1000) + '/s';
     end;
   end;
 begin

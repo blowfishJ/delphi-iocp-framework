@@ -100,7 +100,7 @@ procedure TfmIocpServer.btnStartClick(Sender: TObject);
 begin
   if (edtPort.Text = '') then
   begin
-    zMsgWarning(Handle, '≈‰÷√≤ªÕÍ’˚');
+    zMsgWarning(Handle, 'Configuration is not complete');
     Exit;
   end;
 
@@ -125,9 +125,9 @@ end;
 procedure TfmIocpServer.FormCreate(Sender: TObject);
 begin
   {$ifdef WIN64}
-  Caption := Caption + '(x64)';
+  Caption := Caption + ' (x64)';
   {$else}
-  Caption := Caption + '(x86)';
+  Caption := Caption + ' (x86)';
   {$endif}
   FStartTick := GetTickCount;
   FServer := TTestIocpServer.Create(nil);
@@ -154,7 +154,7 @@ procedure TfmIocpServer.UpdateInfo;
     begin
       t := CalcTickDiff(LastTick, GetTickCount);
       if (t > 0) then
-        Result := Result + ', ' + BytesToStr(Round((NowBytes-LastBytes)/t)*1000) + '/√Î';
+        Result := Result + ', ' + BytesToStr(Round((NowBytes-LastBytes)/t)*1000) + '/s';
     end;
   end;
 begin

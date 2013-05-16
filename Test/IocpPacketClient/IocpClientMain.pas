@@ -5,7 +5,8 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, ExtCtrls, StdCtrls, SyncObjs,
-  Iocp.TcpSocket, Iocp.PacketSocket, Iocp.Logger, Iocp.Utils, uGlobalVars;
+  Iocp.TcpSocket, Iocp.PacketSocket, Iocp.Logger, Iocp.Utils, Iocp.Winsock2,
+  uGlobalVars;
 
 type
   TTestIocpClient = class(TIocpPacketSocket)
@@ -199,7 +200,7 @@ var
 begin
   if (edtPort.Text = '') or (edtHost.Text = '') then
   begin
-    zMsgWarning(Handle, '配置不完整');
+    zMsgWarning(Handle, 'Configuration is not complete');
     Exit;
   end;
 
@@ -211,7 +212,7 @@ begin
   begin
     if (FClient.AsyncConnect(edtHost.Text, StrToInt(edtPort.Text)) = INVALID_SOCKET) then
     begin
-      AppendLog('连接 %s:%s 失败', [edtHost.Text, edtPort.Text]);
+      AppendLog('Connection to %s:%s failed', [edtHost.Text, edtPort.Text]);
       Exit;
     end;
   end;
@@ -237,9 +238,9 @@ end;
 procedure TfmIocpClient.FormCreate(Sender: TObject);
 begin
   {$ifdef WIN64}
-  Caption := Caption + '(x64)';
+  Caption := Caption + ' (x64)';
   {$else}
-  Caption := Caption + '(x86)';
+  Caption := Caption + ' (x86)';
   {$endif}
   FStartTick := GetTickCount;
   FClient := TTestIocpClient.Create(nil);
@@ -267,7 +268,7 @@ procedure TfmIocpClient.UpdateInfo;
     begin
       t := CalcTickDiff(LastTick, GetTickCount);
       if (t > 0) then
-        Result := Result + ', ' + BytesToStr(Round((NowBytes-LastBytes)/t)*1000) + '/秒';
+        Result := Result + ', ' + BytesToStr(Round((NowBytes-LastBytes)/t)*1000) + '/s';
     end;
   end;
 begin
