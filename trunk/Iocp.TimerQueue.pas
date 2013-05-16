@@ -78,13 +78,21 @@ end;
 destructor TIocpTimerQueue.Destroy;
 var
   Timer: TIocpTimerQueueTimer;
+  i: Integer;
 begin
   DeleteTimerQueueEx(FTimerQueueHandle, 0);
+  FTimerQueueHandle := INVALID_HANDLE_VALUE;
 
   try
     FLocker.Enter;
-    for Timer in FTimerList do
+    // thanks Hezihang2012
+    i := 0;
+    while (i < FTimerList.Count) do
+    begin
+      Timer := FTimerList[i];
       Timer.Cancel;
+      if (Timer = FTimerList[i]) then Inc(i);
+    end;
   finally
     FLocker.Leave;
   end;
@@ -134,7 +142,8 @@ end;
 
 destructor TIocpTimerQueueTimer.Destroy;
 begin
-  DeleteTimerQueueTimer(FTimerQueue.Handle, FTimerHandle, 0);
+  if (FTimerQueue.Handle <> INVALID_HANDLE_VALUE) then
+    DeleteTimerQueueTimer(FTimerQueue.Handle, FTimerHandle, 0);
 
   try
     FTimerQueue.FLocker.Enter;
