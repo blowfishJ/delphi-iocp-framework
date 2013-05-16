@@ -101,7 +101,7 @@ procedure TfmIocpHttpTunnel.btnStartClick(Sender: TObject);
 begin
 {  if (edtPort.Text = '') or (edtDestHost.Text = '') or (edtDestPort.Text = '') then
   begin
-    zMsgWarning(Handle, '≈‰÷√≤ªÕÍ’˚');
+    zMsgWarning(Handle, 'Configuration is not complete');
     Exit;
   end;}
 
@@ -128,9 +128,9 @@ end;
 procedure TfmIocpHttpTunnel.FormCreate(Sender: TObject);
 begin
   {$ifdef WIN64}
-  Caption := Caption + '(x64)';
+  Caption := Caption + ' (x64)';
   {$else}
-  Caption := Caption + '(x86)';
+  Caption := Caption + ' (x86)';
   {$endif}
   FStartTick := GetTickCount;
   FServer := TTestIocpHttpTunnel.Create(nil);
@@ -157,7 +157,7 @@ procedure TfmIocpHttpTunnel.UpdateInfo;
     begin
       t := CalcTickDiff(LastTick, GetTickCount);
       if (t > 0) then
-        Result := Result + ', ' + BytesToStr(Round((NowBytes-LastBytes)/t)*1000) + '/√Î';
+        Result := Result + ', ' + BytesToStr(Round((NowBytes-LastBytes)/t)*1000) + '/s';
     end;
   end;
 begin

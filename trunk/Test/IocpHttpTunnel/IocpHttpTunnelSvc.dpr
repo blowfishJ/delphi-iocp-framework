@@ -3,7 +3,9 @@ program IocpHttpTunnelSvc;
 uses
   Vcl.SvcMgr,
   uIocpHttpTunnelSvc in 'uIocpHttpTunnelSvc.pas' {IocpHttpTunnel: TService},
-  uIocpHttpTunnelConfig in 'uIocpHttpTunnelConfig.pas';
+  uIocpHttpTunnelConfig in 'uIocpHttpTunnelConfig.pas',
+  VaniConfig in 'Common\VaniConfig.pas',
+  FileSystemWatcher in 'Common\FileSystemWatcher.pas';
 
 {$R *.RES}
 

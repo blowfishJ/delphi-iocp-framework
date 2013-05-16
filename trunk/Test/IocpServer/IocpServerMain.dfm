@@ -118,51 +118,51 @@ object fmIocpServer: TfmIocpServer
     object Label1: TLabel
       Left = 16
       Top = 37
-      Width = 48
+      Width = 63
       Height = 13
-      Caption = #36830#25509#25968#65306
+      Caption = 'Connections:'
     end
     object Label2: TLabel
       Left = 16
       Top = 57
-      Width = 72
+      Width = 56
       Height = 13
-      Caption = #24050#21457#36865#23383#33410#65306
+      Caption = 'Sent bytes:'
     end
     object Label3: TLabel
       Left = 16
       Top = 77
-      Width = 72
+      Width = 78
       Height = 13
-      Caption = #24050#25509#25910#23383#33410#65306
+      Caption = 'Received bytes:'
     end
     object Label4: TLabel
       Left = 16
       Top = 97
-      Width = 84
+      Width = 76
       Height = 13
-      Caption = #36830#25509#20351#29992#20869#23384#65306
+      Caption = 'Handles - Used:'
     end
     object Label5: TLabel
       Left = 16
       Top = 117
-      Width = 84
+      Width = 74
       Height = 13
-      Caption = #36830#25509#31354#38386#20869#23384#65306
+      Caption = 'Handles - Free:'
     end
     object Label8: TLabel
       Left = 16
       Top = 137
-      Width = 72
+      Width = 50
       Height = 13
-      Caption = 'IO'#20351#29992#20869#23384#65306
+      Caption = 'IO - Used:'
     end
     object Label9: TLabel
       Left = 16
       Top = 157
-      Width = 72
+      Width = 48
       Height = 13
-      Caption = 'IO'#31354#38386#20869#23384#65306
+      Caption = 'IO - Free:'
     end
     object lbRunTime: TLabel
       Left = 136
@@ -180,9 +180,9 @@ object fmIocpServer: TfmIocpServer
     object Label13: TLabel
       Left = 16
       Top = 17
-      Width = 48
+      Width = 43
       Height = 13
-      Caption = #24050#36816#34892#65306
+      Caption = 'Runtime:'
     end
     object lbSndQueueUsedMemory: TLabel
       Left = 136
@@ -213,16 +213,16 @@ object fmIocpServer: TfmIocpServer
     object Label15: TLabel
       Left = 16
       Top = 177
-      Width = 108
+      Width = 95
       Height = 13
-      Caption = #21457#36865#38431#21015#20351#29992#20869#23384#65306
+      Caption = 'Send queue - Used:'
     end
     object Label16: TLabel
       Left = 16
       Top = 197
-      Width = 108
+      Width = 93
       Height = 13
-      Caption = #21457#36865#38431#21015#31354#38386#20869#23384#65306
+      Caption = 'Send queue - Free:'
     end
     object lbPendingRequest: TLabel
       Left = 136
@@ -240,9 +240,9 @@ object fmIocpServer: TfmIocpServer
     object Label7: TLabel
       Left = 16
       Top = 217
-      Width = 72
+      Width = 87
       Height = 13
-      Caption = #24453#22788#29702#35831#27714#65306
+      Caption = 'Pending requests:'
     end
   end
   object Panel2: TPanel
@@ -257,7 +257,7 @@ object fmIocpServer: TfmIocpServer
       Top = 20
       Width = 75
       Height = 25
-      Caption = #21551#21160
+      Caption = 'Start'
       TabOrder = 0
       OnClick = btnStartClick
     end
@@ -266,7 +266,7 @@ object fmIocpServer: TfmIocpServer
       Top = 51
       Width = 75
       Height = 25
-      Caption = #20572#27490
+      Caption = 'Stop'
       Enabled = False
       TabOrder = 1
       OnClick = btnStopClick
@@ -276,9 +276,9 @@ object fmIocpServer: TfmIocpServer
       Top = 22
       Width = 121
       Height = 21
-      EditLabel.Width = 60
+      EditLabel.Width = 24
       EditLabel.Height = 13
-      EditLabel.Caption = #30417#21548#31471#21475#65306
+      EditLabel.Caption = 'Port:'
       NumbersOnly = True
       TabOrder = 2
       Text = '8877'
@@ -288,7 +288,7 @@ object fmIocpServer: TfmIocpServer
       Top = 8
       Width = 65
       Height = 17
-      Caption = #25511#21046#21488
+      Caption = 'Console'
       TabOrder = 3
       OnClick = cbConsoleClick
     end
@@ -298,9 +298,9 @@ object fmIocpServer: TfmIocpServer
       Width = 121
       Height = 21
       Hint = '0'#34920#31034#19981#38480#21046
-      EditLabel.Width = 72
+      EditLabel.Width = 58
       EditLabel.Height = 13
-      EditLabel.Caption = #36229#26102#65288#31186#65289#65306
+      EditLabel.Caption = 'Timeout (s):'
       NumbersOnly = True
       ParentShowHint = False
       ShowHint = True
@@ -313,9 +313,9 @@ object fmIocpServer: TfmIocpServer
       Width = 121
       Height = 21
       Hint = '0'#34920#31034#19981#38480#21046
-      EditLabel.Width = 84
+      EditLabel.Width = 37
       EditLabel.Height = 13
-      EditLabel.Caption = #29983#21629#26399#65288#31186#65289#65306
+      EditLabel.Caption = 'Life (s):'
       NumbersOnly = True
       ParentShowHint = False
       ShowHint = True

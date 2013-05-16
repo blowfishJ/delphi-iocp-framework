@@ -9,10 +9,10 @@ function CalcTickDiff(const StartTick, EndTick: LongWord): LongWord;
 function ThreadFormat(const Fmt: string; const Args: array of const): string;
 function ThreadWideFormat(const Fmt: WideString; const Args: array of const): WideString;
 function ThreadFormatDateTime(const Fmt: string; DateTime: TDateTime): string;
-procedure zMsgInfo(Handle: THandle; const AMsg: string; const ATitle: string = '提示信息');
-procedure zMsgError(Handle: THandle; const AMsg: string; const ATitle: string = '错误信息');
-function zMsgQuest(Handle: THandle; const AMsg: string; const ATitle: string = '确认信息'): Integer;
-procedure zMsgWarning(Handle: THandle; const AMsg: string; const ATitle: string = '警告信息');
+procedure zMsgInfo(Handle: THandle; const AMsg: string; const ATitle: string = 'message');
+procedure zMsgError(Handle: THandle; const AMsg: string; const ATitle: string = 'error message');
+function zMsgQuest(Handle: THandle; const AMsg: string; const ATitle: string = 'confirmation'): Integer;
+procedure zMsgWarning(Handle: THandle; const AMsg: string; const ATitle: string = 'warning message');
 function SysErrInfo(ErrCode: DWORD): string;
 function TickToTimeStr(t: Int64): string;
 function RandRange(RangeFrom, RangeTo: Int64): Int64;
@@ -74,29 +74,29 @@ begin
   Result := FormatDateTime(Fmt, DateTime, Fms);
 end;
 
-procedure zMsgInfo(Handle: THandle; const AMsg: string; const ATitle: string = '提示信息');
+procedure zMsgInfo(Handle: THandle; const AMsg: string; const ATitle: string = 'message');
 begin
   MessageBox(Handle, PChar(AMsg), PChar(ATitle), MB_OK or MB_ICONINFORMATION);
 end;
 
-procedure zMsgError(Handle: THandle; const AMsg: string; const ATitle: string = '错误信息');
+procedure zMsgError(Handle: THandle; const AMsg: string; const ATitle: string = 'error message');
 begin
   MessageBox(Handle, PChar(AMsg), PChar(ATitle), MB_OK or MB_ICONERROR);
 end;
 
-function zMsgQuest(Handle: THandle; const AMsg: string; const ATitle: string = '确认信息'): Integer;
+function zMsgQuest(Handle: THandle; const AMsg: string; const ATitle: string = 'confirmation'): Integer;
 begin
   Result := MessageBox(Handle, PChar(AMsg), PChar(ATitle), MB_YESNO or MB_ICONQUESTION);
 end;
 
-procedure zMsgWarning(Handle: THandle; const AMsg: string; const ATitle: string = '警告信息');
+procedure zMsgWarning(Handle: THandle; const AMsg: string; const ATitle: string = 'warning message');
 begin
   MessageBox(Handle, PChar(AMsg), PChar(ATitle), MB_OK or MB_ICONWARNING);
 end;
 
 function SysErrInfo(ErrCode: DWORD): string;
 begin
-  Result := Format('系统错误: %d=%s', [ErrCode, SysErrorMessage(ErrCode)]);
+  Result := Format('System error: %d=%s', [ErrCode, SysErrorMessage(ErrCode)]);
 end;
 
 function TickToTimeStr(t: Int64): string;
@@ -104,13 +104,13 @@ begin
   if (t = 0) then
     Result := ''
   else if (t < 1000) then
-    Result := Format('%d毫秒', [t])
+    Result := Format('%dms', [t])
   else if (t < 60000) then
-    Result := Format('%d秒', [t div 1000]) + TickToTimeStr(t mod 1000)
+    Result := Format('%ds', [t div 1000]) + TickToTimeStr(t mod 1000)
   else if (t < 3600000) then
-    Result := Format('%d分钟', [t div 60000]) + TickToTimeStr(t mod 60000)
+    Result := Format('%dm', [t div 60000]) + TickToTimeStr(t mod 60000)
   else
-    Result := Format('%d小时', [t div 3600000]) + TickToTimeStr(t mod 3600000);
+    Result := Format('%dh', [t div 3600000]) + TickToTimeStr(t mod 3600000);
 end;
 
 function RandRange(RangeFrom, RangeTo: Int64): Int64;
