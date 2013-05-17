@@ -1840,9 +1840,11 @@ begin
   FTimerQueue.Release;
   {$ENDIF}
 
+  {$IFDEF __TIME_OUT_TIMER__}
   if (FTimeout > 0) and (FTimeout < 5000) then
     LTimeout := FTimeout
   else
+  {$ENDIF}
     LTimeout := 5000;
 
   // 这里必须加上Sleep，以保证所有断开连接的命令比后面退出线程的命令先进入IOCP队列
