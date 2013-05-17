@@ -116,8 +116,9 @@ type
     FTimeout: DWORD;
     FLife: DWORD;
     // 连接超时检查
+    procedure OnTimerCreate(Sender: TObject);
     procedure OnTimerExecute(Sender: TObject);
-    procedure OnTimerCancel(Sender: TObject);
+    procedure OnTimerDestroy(Sender: TObject);
     {$ENDIF}
 
     function GetRefCount: Integer;
@@ -493,18 +494,19 @@ begin
   Result := (InterlockedDecrement(FRefCount) = 0);
   if not Result then Exit;
 
-  // 如果Socket还没关闭，则需要关闭，否则会造成句柄泄露
-  // 这种情况发生在远端主动断开连接
-  Disconnect;
+  Owner.CloseSocket(FSocket);
+  Owner._TriggerClientDisconnected(Self);
+  Owner.FreeConnection(Self);
 end;
 
 procedure TIocpSocketConnection.Disconnect;
 begin
   if (InterlockedExchange(FDisconnected, 1) <> 0) then Exit;
 
-  Owner.CloseSocket(FSocket);
-  Owner._TriggerClientDisconnected(Self);
-  Owner.FreeConnection(Self);
+  Release;
+  {$IFDEF __TIME_OUT_TIMER__}
+  FTimer.Release;
+  {$ENDIF}
 end;
 
 procedure TIocpSocketConnection.DecPendingRecv;
@@ -634,10 +636,10 @@ begin
   {$IFDEF __TIME_OUT_TIMER__}
   FTimeout := Owner.Timeout;
   FLife := Owner.ClientLife;
-  AddRef; // 为Timer增加连接引用计数
   FTimer := TIocpTimerQueueTimer.Create(Owner.FTimerQueue, 1000);
+  FTimer.OnCreate := OnTimerCreate;
   FTimer.OnTimer := OnTimerExecute;
-  FTimer.OnCancel := OnTimerCancel;
+  FTimer.OnDestroy := OnTimerDestroy;
   {$ENDIF}
 end;
 
@@ -719,13 +721,22 @@ begin
 end;
 
 {$IFDEF __TIME_OUT_TIMER__}
+procedure TIocpSocketConnection.OnTimerCreate(Sender: TObject);
+begin
+  AddRef; // 为Timer增加连接引用计数
+end;
+
+procedure TIocpSocketConnection.OnTimerDestroy(Sender: TObject);
+begin
+  Release; // 对应Timer创建时的AddRef(procedure Initialize)
+end;
+
 procedure TIocpSocketConnection.OnTimerExecute(Sender: TObject);
 begin
   try
     if IsClosed then
     begin
       FTimer.Release; // 连接断开时，将Timer也释放掉，以免Timer再次触发引发异常访问
-      Release; // 对应Timer创建时的AddRef(procedure Initialize)
       Exit;
     end;
 
@@ -734,7 +745,6 @@ begin
     begin
       TriggerTimeout;
       FTimer.Release; // 连接断开时，将Timer也释放掉，以免Timer再次触发引发异常访问
-      Release; // 对应Timer创建时的AddRef(procedure Initialize)
       Disconnect;
       Exit;
     end;
@@ -744,18 +754,11 @@ begin
     begin
       TriggerLifeout;
       FTimer.Release; // 连接断开时，将Timer也释放掉，以免Timer再次触发引发异常访问
-      Release; // 对应Timer创建时的AddRef(procedure Initialize)
       Disconnect;
       Exit;
     end;
   except
   end;
-end;
-
-procedure TIocpSocketConnection.OnTimerCancel(Sender: TObject);
-begin
-  Release; // 对应Timer创建时的AddRef(procedure Initialize)
-  FTimer.Release; // 连接断开时，将Timer也释放掉，以免Timer再次触发引发异常访问
 end;
 
 procedure TIocpSocketConnection.TriggerTimeout;
@@ -1048,7 +1051,7 @@ begin
         end;
 
         // 如果ACCEPT事件触发，则投递新的Accept套接字
-        // 每次投递32个
+        // 每次投递 FInitAcceptNum 个
         if (RetEvents.lNetworkEvents and FD_ACCEPT = FD_ACCEPT) then
         begin
           if (RetEvents.iErrorCode[FD_ACCEPT_BIT] <> 0) then
@@ -1058,7 +1061,7 @@ begin
             Break;
           end;
 
-          for i := 1 to 32 do
+          for i := 1 to FInitAcceptNum do
           begin
             if not FOwner.PostNewAcceptEx(FListenSocket, FAiFamily) then Break;
           end;
@@ -1188,7 +1191,7 @@ function TIocpTcpSocket.AssociateSocketWithCompletionPort(Socket: TSocket;
 begin
   Result := (Iocp.ApiFix.CreateIoCompletionPort(Socket, FIocpHandle, ULONG_PTR(Connection), 0) <> 0);
   if not Result then
-    AppendLog(Format('绑定IOCP失败,Socket=%d, ERR=%d,%s', [Socket, GetLastError, SysErrorMessage(GetLastError)]), ltError);
+    AppendLog(Format('绑定IOCP失败, IocpHandle=%d, Socket=%d, ERR=%d,%s', [FIocpHandle, Socket, GetLastError, SysErrorMessage(GetLastError)]), ltWarning);
 end;
 
 function TIocpTcpSocket.AllocIoData(Socket: TSocket;
@@ -1589,7 +1592,10 @@ begin
       // 将Socket邦定到IOCP
       if not AssociateSocketWithCompletionPort(PerIoData.ClientSocket, Connection) then
       begin
-        AppendLog('RequestAcceptComplete.AssociateSocketWithCompletionPort failed');
+        AppendLog(
+          'RequestAcceptComplete.AssociateSocketWithCompletionPort failed, Socket=%d',
+          [PerIoData.ClientSocket],
+          ltWarning);
         Connection.Release;
         Exit;
       end;
@@ -1606,7 +1612,10 @@ begin
     if (setsockopt(PerIoData.ClientSocket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
       PAnsiChar(@PerIoData.ListenSocket), SizeOf(PAnsiChar)) = SOCKET_ERROR) then
     begin
-      AppendLog('%s.RequestAcceptComplete.setsockopt.SO_UPDATE_ACCEPT_CONTEXT ERROR %d=%s', [ClassName, WSAGetLastError, SysErrorMessage(WSAGetLastError)], ltWarning);
+      AppendLog(
+        '%s.RequestAcceptComplete.setsockopt.SO_UPDATE_ACCEPT_CONTEXT, Socket=%d, ERROR %d=%s',
+        [ClassName, PerIoData.ClientSocket, WSAGetLastError, SysErrorMessage(WSAGetLastError)],
+        ltWarning);
       Connection.Disconnect;
       Exit;
     end;

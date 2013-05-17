@@ -124,6 +124,7 @@ begin
     Exit;
   end;
 
+  FServer.Addr := '127.0.0.1';
   FServer.Port := StrToIntDef(edtPort.Text, 80);
   FServer.Timeout := StrToIntDef(edtTimeout.Text, 0);
   FServer.ClientLife := StrToIntDef(edtLife.Text, 0);
@@ -222,7 +223,7 @@ begin
     Client.AnswerHTML('', 'text/plain', '', RawByteString('Hello World'))
   else
     inherited DoOnRequest(Client);
-  fmIocpHttpServer.AddLog(Client.Method + ' ' + Client.PathAndParams);
+//  fmIocpHttpServer.AddLog(Client.Method + ' ' + Client.PathAndParams);
 end;
 
 end.
