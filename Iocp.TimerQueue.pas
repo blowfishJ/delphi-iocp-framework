@@ -37,12 +37,12 @@ type
     FInterval: DWORD;
     FRefCount: Integer;
     FOnTimer: TNotifyEvent;
-    FOnCancel: TNotifyEvent;
+    FOnDestroy: TNotifyEvent;
+    FOnCreate: TNotifyEvent;
 
     procedure SetInterval(const Value: DWORD);
   protected
     procedure Execute; virtual;
-    procedure Cancel; virtual;
   public
     constructor Create(TimerQueue: TIocpTimerQueue; Interval: DWORD); virtual;
     destructor Destroy; override;
@@ -51,8 +51,9 @@ type
     function Release: Boolean;
 
     property Interval: DWORD read FInterval write SetInterval;
+    property OnCreate: TNotifyEvent read FOnCreate write FOnCreate;
     property OnTimer: TNotifyEvent read FOnTimer write FOnTimer;
-    property OnCancel: TNotifyEvent read FOnCancel write FOnCancel;
+    property OnDestroy: TNotifyEvent read FOnDestroy write FOnDestroy;
   end;
 
 implementation
@@ -90,7 +91,7 @@ begin
     while (i < FTimerList.Count) do
     begin
       Timer := FTimerList[i];
-      Timer.Cancel;
+      Timer.Release;
       if (Timer = FTimerList[i]) then Inc(i);
     end;
   finally
@@ -138,10 +139,16 @@ begin
   finally
     FTimerQueue.FLocker.Leave;
   end;
+
+  if Assigned(FOnCreate) then
+    FOnCreate(Self);
 end;
 
 destructor TIocpTimerQueueTimer.Destroy;
 begin
+  if Assigned(FOnDestroy) then
+    FOnDestroy(Self);
+
   if (FTimerQueue.Handle <> INVALID_HANDLE_VALUE) then
     DeleteTimerQueueTimer(FTimerQueue.Handle, FTimerHandle, 0);
 
@@ -173,12 +180,6 @@ procedure TIocpTimerQueueTimer.Execute;
 begin
   if Assigned(FOnTimer) then
     FOnTimer(Self);
-end;
-
-procedure TIocpTimerQueueTimer.Cancel;
-begin
-  if Assigned(FOnCancel) then
-    FOnCancel(Self);
 end;
 
 procedure TIocpTimerQueueTimer.SetInterval(const Value: DWORD);

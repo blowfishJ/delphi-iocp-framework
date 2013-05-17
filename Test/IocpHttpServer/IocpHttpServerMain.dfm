@@ -160,7 +160,7 @@ object fmIocpHttpServer: TfmIocpHttpServer
     object Label9: TLabel
       Left = 16
       Top = 144
-      Width = 50
+      Width = 56
       Height = 13
       Caption = 'IO - Free'#65306
     end

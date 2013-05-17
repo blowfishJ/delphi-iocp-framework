@@ -1,6 +1,6 @@
 unit IocpDsServer;
 
-//{$define __IOCP_DATASNAP__}
+{$define __IOCP_DATASNAP__}
 
 interface
 

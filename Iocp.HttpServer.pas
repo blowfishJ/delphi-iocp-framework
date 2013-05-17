@@ -10,7 +10,7 @@ uses
 
 const
   IOCP_HTTP_SERVER_VERSION  = 'IocpHttpServer/1.0';
-  IOCP_HTTP_INIT_ACCEPT_NUM = 1;
+  IOCP_HTTP_INIT_ACCEPT_NUM = 64;
 
 type
   TIocpHttpServer = class;
