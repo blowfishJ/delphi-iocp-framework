@@ -1,6 +1,6 @@
 unit Iocp.HttpServer;
 
-{$define __LOGIC_THREAD_POOL__}
+//{$define __LOGIC_THREAD_POOL__}
 
 interface
 
@@ -10,7 +10,7 @@ uses
 
 const
   IOCP_HTTP_SERVER_VERSION  = 'IocpHttpServer/1.0';
-  IOCP_HTTP_INIT_ACCEPT_NUM = 64;
+  IOCP_HTTP_INIT_ACCEPT_NUM = 1;
 
 type
   TIocpHttpServer = class;
