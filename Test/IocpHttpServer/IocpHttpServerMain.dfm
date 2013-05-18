@@ -250,6 +250,7 @@ object fmIocpHttpServer: TfmIocpHttpServer
       Width = 186
       Height = 203
       TabOrder = 0
+      Visible = False
     end
   end
   object Panel2: TPanel

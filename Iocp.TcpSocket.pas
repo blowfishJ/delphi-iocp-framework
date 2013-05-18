@@ -128,6 +128,8 @@ type
     function InitSocket: Boolean;
     procedure UpdateTick;
 
+    function ErrorIsNorma(Err: Integer): Boolean;
+
     procedure IncPendingRecv;
     procedure DecPendingRecv;
     function PostReadZero: Boolean;
@@ -494,7 +496,8 @@ begin
   Result := (InterlockedDecrement(FRefCount) = 0);
   if not Result then Exit;
 
-  Owner.CloseSocket(FSocket);
+  if not IsClosed then
+    Owner.CloseSocket(FSocket);
   Owner._TriggerClientDisconnected(Self);
   Owner.FreeConnection(Self);
 end;
@@ -503,6 +506,7 @@ procedure TIocpSocketConnection.Disconnect;
 begin
   if (InterlockedExchange(FDisconnected, 1) <> 0) then Exit;
 
+  Owner.CloseSocket(FSocket);
   Release;
   {$IFDEF __TIME_OUT_TIMER__}
   FTimer.Release;
@@ -605,6 +609,11 @@ begin
 {$ENDIF}
 
   Result := True;
+end;
+
+function TIocpSocketConnection.ErrorIsNorma(Err: Integer): Boolean;
+begin
+  Result := (Err = WSAECONNABORTED) or (Err = WSAECONNRESET) or (Err = WSAESHUTDOWN);
 end;
 
 procedure TIocpSocketConnection.IncPendingRecv;
@@ -790,7 +799,7 @@ begin
     and (WSAGetLastError <> WSA_IO_PENDING) then
   begin
     LastErr := WSAGetLastError;
-    if (LastErr <> WSAECONNABORTED) and (LastErr <> WSAECONNRESET) then
+    if not ErrorIsNorma(LastErr) then
       AppendLog('%s.Socket%d PostReadZero.WSARecv ERROR %d=%s', [ClassName, FSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
     Release; // 对应函数开头的 AddRef
     Disconnect; // 对应连接初始化时的 FRefCount := 1
@@ -826,7 +835,7 @@ begin
     and (WSAGetLastError <> WSA_IO_PENDING) then
   begin
     LastErr := WSAGetLastError;
-    if (LastErr <> WSAECONNABORTED) and (LastErr <> WSAECONNRESET) then
+    if not ErrorIsNorma(LastErr) then
       AppendLog('%s.Socket%d PostRead.WSARecv ERROR %d=%s', [ClassName, FSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
     DecPendingRecv;
     Release; // 对应函数开头的 AddRef
@@ -867,7 +876,7 @@ begin
     and (WSAGetLastError <> WSA_IO_PENDING) then
   begin
     LastErr := WSAGetLastError;
-    if (LastErr <> WSAECONNABORTED) and (LastErr <> WSAECONNRESET) then
+    if not ErrorIsNorma(LastErr) then
       AppendLog('%s.Socket%d PostWrite.WSASend error, ERR=%d,%s', [ClassName, FSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
     DecPendingSend;
     Release; // 对应函数开头的 AddRef
@@ -1976,8 +1985,8 @@ function TIocpTcpSocket._TriggerClientSentData(Client: TIocpSocketConnection;
   Buf: Pointer; Len: Integer): Boolean;
 begin
   TInterlocked.Add(FSentBytes, Len);
-  Result := TriggerClientSentData(Client, Buf, Len);
   Client._TriggerClientSentData(Buf, Len);
+  Result := TriggerClientSentData(Client, Buf, Len);
 end;
 
 { TIocpLineSocketConnection }
