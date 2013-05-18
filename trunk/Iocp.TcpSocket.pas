@@ -627,7 +627,6 @@ begin
   FLastTick := 0;
   FTag := nil;
 
-//  ZeroMemory(@FRemoteAddr, SizeOf(TSockAddrIn));
   FRemoteIP := '';
   FRemotePort := 0;
 
@@ -636,8 +635,7 @@ begin
   {$IFDEF __TIME_OUT_TIMER__}
   FTimeout := Owner.Timeout;
   FLife := Owner.ClientLife;
-  FTimer := TIocpTimerQueueTimer.Create(Owner.FTimerQueue, 1000);
-  FTimer.OnCreate := OnTimerCreate;
+  FTimer := TIocpTimerQueueTimer.Create(Owner.FTimerQueue, 1000, OnTimerCreate);
   FTimer.OnTimer := OnTimerExecute;
   FTimer.OnDestroy := OnTimerDestroy;
   {$ENDIF}

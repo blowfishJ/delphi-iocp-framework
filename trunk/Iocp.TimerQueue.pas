@@ -38,20 +38,18 @@ type
     FRefCount: Integer;
     FOnTimer: TNotifyEvent;
     FOnDestroy: TNotifyEvent;
-    FOnCreate: TNotifyEvent;
 
     procedure SetInterval(const Value: DWORD);
   protected
     procedure Execute; virtual;
   public
-    constructor Create(TimerQueue: TIocpTimerQueue; Interval: DWORD); virtual;
+    constructor Create(TimerQueue: TIocpTimerQueue; Interval: DWORD; OnCreate: TNotifyEvent); virtual;
     destructor Destroy; override;
 
     function AddRef: Integer;
     function Release: Boolean;
 
     property Interval: DWORD read FInterval write SetInterval;
-    property OnCreate: TNotifyEvent read FOnCreate write FOnCreate;
     property OnTimer: TNotifyEvent read FOnTimer write FOnTimer;
     property OnDestroy: TNotifyEvent read FOnDestroy write FOnDestroy;
   end;
@@ -119,7 +117,7 @@ end;
 
 { TIocpTimerQueueTimer }
 
-constructor TIocpTimerQueueTimer.Create(TimerQueue: TIocpTimerQueue; Interval: DWORD);
+constructor TIocpTimerQueueTimer.Create(TimerQueue: TIocpTimerQueue; Interval: DWORD; OnCreate: TNotifyEvent);
 begin
   FTimerQueue := TimerQueue;
   FInterval := Interval;
@@ -140,8 +138,8 @@ begin
     FTimerQueue.FLocker.Leave;
   end;
 
-  if Assigned(FOnCreate) then
-    FOnCreate(Self);
+  if Assigned(OnCreate) then
+    OnCreate(Self);
 end;
 
 destructor TIocpTimerQueueTimer.Destroy;
