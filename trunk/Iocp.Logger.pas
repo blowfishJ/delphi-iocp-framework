@@ -10,7 +10,7 @@ type
   TLogTypeSets = set of TLogType;
 
 const
-  LogTypeStr: array [TLogType] of string = ('', '¾¯¸æ', '´íÎó', 'Òì³£');
+  LogTypeStr: array [TLogType] of string = ('', 'WAR', 'ERR', 'EXP');
 
 type
   TCacheFileStream = class(TThread)

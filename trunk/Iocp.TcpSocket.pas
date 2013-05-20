@@ -35,9 +35,6 @@ ZY. 2012.04.19
 // 启用超时检测时钟
 {$define __TIME_OUT_TIMER__}
 
-// 试验Socket重用，尚未成功，不要开启！
-//{$define __REUSE_SOCKET__}
-
 interface
 
 uses
@@ -75,7 +72,7 @@ type
       1: (AcceptExBuffer: TAcceptExBuffer);
   end;
 
-  TIocpOperationType = (iotReadZero, iotRead, iotWrite, iotAccept, iotConnect{$ifdef __REUSE_SOCKET__}, iotDisconnect{$endif});
+  TIocpOperationType = (iotReadZero, iotRead, iotWrite, iotAccept, iotConnect, iotDisconnect);
 
   {
     *** 单IO数据结构
@@ -142,10 +139,6 @@ type
     procedure IncPendingSend;
     procedure DecPendingSend;
     function PostWrite(const Buf: Pointer; Size: Integer): Boolean;
-
-    {$ifdef __REUSE_SOCKET__}
-    function ReuseSocket: Boolean;
-    {$endif}
 
     procedure _TriggerClientRecvData(Buf: Pointer; Len: Integer);
     procedure _TriggerClientSentData(Buf: Pointer; Len: Integer);
@@ -282,9 +275,6 @@ type
     {$ENDIF}
     FMaxClients: Integer;
     FSentBytes, FRecvBytes: Int64;
-    {$ifdef __REUSE_SOCKET__}
-    FAcceptSocketPool, FConnectSocketPool: TSocketPool;
-    {$endif}
     FOnClientConnected: TIocpNotifyEvent;
     FOnClientSentData: TIocpDataEvent;
     FOnClientRecvData: TIocpDataEvent;
@@ -308,12 +298,11 @@ type
 
     function AssociateSocketWithCompletionPort(Socket: TSocket; Connection: TIocpSocketConnection): Boolean;
     function PostNewAcceptEx(ListenSocket: TSocket; AiFamily: Integer): Boolean;
+    procedure TrackSocketStatus(Socket: TSocket);
 
     procedure RequestAcceptComplete(PerIoData: PIocpPerIoData);
     procedure RequestConnectComplete(Connection: TIocpSocketConnection);
-    {$ifdef __REUSE_SOCKET__}
     procedure RequestDisconnectComplete(Connection: TIocpSocketConnection);
-    {$endif}
     procedure RequestReadZeroComplete(Connection: TIocpSocketConnection; PerIoData: PIocpPerIoData);
     procedure RequestReadComplete(Connection: TIocpSocketConnection; PerIoData: PIocpPerIoData);
     procedure RequestWriteComplete(Connection: TIocpSocketConnection; PerIoData: PIocpPerIoData);
@@ -512,36 +501,40 @@ begin
   Result := (InterlockedDecrement(FRefCount) = 0);
   if not Result then Exit;
 
-  if not IsClosed then
-  begin
-    {$ifdef __REUSE_SOCKET__}
-    if (FConnectionSource = csAccept) then
-      ReuseSocket
-    else
-    {$else}
-      Owner.CloseSocket(FSocket);
-    {$endif}
-  end;
+  Owner.CloseSocket(FSocket);
   Owner._TriggerClientDisconnected(Self);
   Owner.FreeConnection(Self);
 end;
 
 procedure TIocpSocketConnection.Disconnect;
+var
+  PerIoData: PIocpPerIoData;
+  LastErr: Integer;
 begin
   if (InterlockedExchange(FDisconnected, 1) <> 0) then Exit;
 
-  // 主动断开连接必须在这里关闭Socket，否则可能会造成ReadZero请求一直挂起
-  {$ifdef __REUSE_SOCKET__}
-  if (FConnectionSource = csAccept) then
-    ReuseSocket
-  else
-  {$else}
-    Owner.CloseSocket(FSocket);
-  {$endif}
-  Release;
-  {$IFDEF __TIME_OUT_TIMER__}
-  FTimer.Release;
-  {$ENDIF}
+  // 增加引用计数
+  // 如果返回1则说明现在正在关闭连接
+  if (AddRef = 1) then Exit;
+
+  PerIoData := Owner.AllocIoData(FSocket, iotDisconnect);
+
+  // 主动断开连接必须在这里断开Socket，否则可能会造成ReadZero请求一直挂起
+  if not DisconnectEx(FSocket, PWSAOverlapped(PerIoData), 0, 0)
+    and (WSAGetLastError <> WSA_IO_PENDING) then
+  begin
+    LastErr := WSAGetLastError;
+    if not ErrorIsNorma(LastErr) then
+      AppendLog('%s.Socket%d ReuseSocket.DisconnectEx ERROR %d=%s', [ClassName, FSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+    Release; // 对应函数开头的 AddRef
+    Iocp.Winsock2.closesocket(FSocket);
+    Owner.FreeIoData(PerIoData);
+
+    Release;
+    {$IFDEF __TIME_OUT_TIMER__}
+    FTimer.Release;
+    {$ENDIF}
+  end;
 end;
 
 procedure TIocpSocketConnection.DecPendingRecv;
@@ -644,7 +637,11 @@ end;
 
 function TIocpSocketConnection.ErrorIsNorma(Err: Integer): Boolean;
 begin
-  Result := (Err = WSAECONNABORTED) or (Err = WSAECONNRESET) or (Err = WSAESHUTDOWN);
+  Result :=
+    (Err = WSAEINTR) or
+    (Err = WSAECONNABORTED) or
+    (Err = WSAECONNRESET) or
+    (Err = WSAESHUTDOWN);
 end;
 
 procedure TIocpSocketConnection.IncPendingRecv;
@@ -831,7 +828,10 @@ begin
   begin
     LastErr := WSAGetLastError;
     if not ErrorIsNorma(LastErr) then
+    begin
       AppendLog('%s.Socket%d PostReadZero.WSARecv ERROR %d=%s', [ClassName, FSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+      Owner.TrackSocketStatus(FSocket);
+    end;
     Release; // 对应函数开头的 AddRef
     Disconnect; // 对应连接初始化时的 FRefCount := 1
     Owner.FreeIoData(PerIoData);
@@ -840,36 +840,6 @@ begin
 
   Result := True;
 end;
-
-{$ifdef __REUSE_SOCKET__}
-function TIocpSocketConnection.ReuseSocket: Boolean;
-var
-  PerIoData: PIocpPerIoData;
-  Bytes, Flags: Cardinal;
-  LastErr: Integer;
-begin
-  Result := False;
-
-  // 增加引用计数
-  // 如果返回1则说明现在正在关闭连接
-  if (AddRef = 1) then Exit;
-
-  PerIoData := Owner.AllocIoData(FSocket, iotDisconnect);
-  if not DisconnectEx(FSocket, PWSAOverlapped(PerIoData), TF_REUSE_SOCKET, 0)
-    and (WSAGetLastError <> WSA_IO_PENDING) then
-  begin
-    LastErr := WSAGetLastError;
-    if not ErrorIsNorma(LastErr) then
-      AppendLog('%s.Socket%d ReuseSocket.DisconnectEx ERROR %d=%s', [ClassName, FSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
-    Release; // 对应函数开头的 AddRef
-    Iocp.Winsock2.closesocket(FSocket);
-    Owner.FreeIoData(PerIoData);
-    Exit;
-  end;
-
-  Result := True;
-end;
-{$endif}
 
 function TIocpSocketConnection.PostRead: Boolean;
 var
@@ -1036,7 +1006,7 @@ begin
       begin
         LastErr := GetLastError;
         if (LastErr <> ERROR_ABANDONED_WAIT_0) then
-          AppendLog('%s Io线程 %d 出错. ERR %d=%s', [FOwner.ClassName, ThreadID, LastErr, SysErrorMessage(LastErr)], ltError);
+          AppendLog('%s IoThread %d ERROR %d=%s', [FOwner.ClassName, ThreadID, LastErr, SysErrorMessage(LastErr)], ltError);
         Break;
       end;
 
@@ -1059,7 +1029,7 @@ begin
     FOwner.ProcessRequest(Connection, PerIoData, Self);
   except
     on e: Exception do
-      AppendLog('TIocpIoThread.Execute, %s=%s', [e.ClassName, e.Message], ltException);
+      AppendLog('TIocpIoThread.Execute ERROR %s=%s', [e.ClassName, e.Message], ltException);
   end;
 
 //  AppendLog('%s.IoThread %d exit', [FOwner.ClassName, ThreadID]);
@@ -1114,7 +1084,7 @@ begin
         if (WSAEnumNetworkEvents(FListenSocket, AcceptEvents[0], @RetEvents) = SOCKET_ERROR) then
         begin
           LastErr := WSAGetLastError;
-          AppendLog('%s.WSAEnumNetworkEvents失败, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
+          AppendLog('%s.WSAEnumNetworkEvents, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
           Break;
         end;
 
@@ -1125,7 +1095,7 @@ begin
           if (RetEvents.iErrorCode[FD_ACCEPT_BIT] <> 0) then
           begin
             LastErr := WSAGetLastError;
-            AppendLog('%s.WSAEnumNetworkEvents失败, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
+            AppendLog('%s.WSAEnumNetworkEvents, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
             Break;
           end;
 
@@ -1142,7 +1112,7 @@ begin
     end;
   except
     on e: Exception do
-      AppendLog('%s.Execute, %s=%s', [ClassName, e.ClassName, e.Message], ltException);
+      AppendLog('%s.Execute ERROR %s=%s', [ClassName, e.ClassName, e.Message], ltException);
   end;
 //  AppendLog('%s.AcceptThread %d exit', [FOwner.ClassName, ThreadID]);
 end;
@@ -1163,12 +1133,6 @@ begin
   FConnectionList := TIocpSocketConnectionDictionary.Create(Self);
   FConnectionListLocker := TCriticalSection.Create;
   FIdleConnectionList := TIocpSocketConnectionDictionary.Create(Self);
-
-  {$ifdef __REUSE_SOCKET__}
-  FAcceptSocketPool := TSocketPool.Create;
-  FConnectSocketPool := TSocketPool.Create;
-  {$endif}
-
   FListenThreads := TList.Create;
   FListenThreadsLocker := TCriticalSection.Create;
 
@@ -1200,11 +1164,6 @@ begin
   FPerIoDataPool.Clear;
   FPerIoDataPool.Release;
 
-  {$ifdef __REUSE_SOCKET__}
-  FAcceptSocketPool.Free;
-  FConnectSocketPool.Free;
-  {$endif}
-
   inherited Destroy;
 end;
 
@@ -1231,7 +1190,7 @@ begin
   if (ClientSocket = INVALID_SOCKET) then
   begin
     LastErr := WSAGetLastError;
-    AppendLog('%s.PostNewAcceptEx.为AcceptEx创建Socket失败, ERR=%d,%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
+    AppendLog('%s.PostNewAcceptEx.WSASocket, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
     Exit;
   end;
 
@@ -1256,7 +1215,8 @@ begin
     LastErr := WSAGetLastError;
     if (LastErr <> WSA_IO_PENDING) then
     begin
-      AppendLog('%s.PostNewAcceptEx.调用AcceptEx失败(ListenSocket=%d, ClientSocket=%d), ERR=%d,%s', [ClassName, ListenSocket, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+      AppendLog('%s.PostNewAcceptEx.AcceptEx(ListenSocket=%d, ClientSocket=%d), ERROR %d=%s', [ClassName, ListenSocket, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+      TrackSocketStatus(ClientSocket);
       FreeIoData(PerIoData);
       Connection.Disconnect;
       Exit;
@@ -1276,10 +1236,16 @@ end;
 
 function TIocpTcpSocket.AssociateSocketWithCompletionPort(Socket: TSocket;
   Connection: TIocpSocketConnection): Boolean;
+var
+  LastErr: DWORD;
 begin
   Result := (Iocp.ApiFix.CreateIoCompletionPort(Socket, FIocpHandle, ULONG_PTR(Connection), 0) <> 0);
   if not Result then
-    AppendLog(Format('绑定IOCP失败, IocpHandle=%d, Socket=%d, ERR=%d,%s', [FIocpHandle, Socket, GetLastError, SysErrorMessage(GetLastError)]), ltWarning);
+  begin
+    LastErr := GetLastError;
+    AppendLog(Format('CreateIoCompletionPort(IocpHandle=%d, Socket=%d), ERROR %d=%s', [FIocpHandle, Socket, LastErr, SysErrorMessage(LastErr)]), ltWarning);
+    TrackSocketStatus(Socket);
+  end;
 end;
 
 function TIocpTcpSocket.AllocIoData(Socket: TSocket;
@@ -1341,7 +1307,7 @@ begin
   if (getaddrinfo(PWideChar(RemoteAddr), PWideChar(IntToStr(RemotePort)), @InAddrInfo, @POutAddrInfo) <> 0) then
   begin
     LastErr := WSAGetLastError;
-    AppendLog('%s.AsyncConnect getaddrinfo失败, ERR=%d,%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
+    AppendLog('%s.AsyncConnect.getaddrinfo, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
     Exit;
   end;
 
@@ -1371,7 +1337,7 @@ begin
     begin
       LastErr := WSAGetLastError;
       Iocp.Winsock2.closesocket(ClientSocket);
-      AppendLog('%s.AsyncConnect绑定ConnectEx(%d)端口失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+      AppendLog('%s.AsyncConnect.bind(Socket=%d), ERROR %d=%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
       Exit;
     end;
 
@@ -1394,7 +1360,7 @@ begin
       (WSAGetLastError <> WSA_IO_PENDING) then
     begin
       LastErr := WSAGetLastError;
-      AppendLog('%s.AsyncConnect.ConnectEx(%d)失败, ERR=%d,%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+      AppendLog('%s.AsyncConnect.ConnectEx(Socket=%d), ERROR %d=%s', [ClassName, ClientSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
       FreeIoData(PerIoData);
       Connection.Release;
       Connection.Disconnect;
@@ -1530,7 +1496,7 @@ begin
     if (getaddrinfo(PHost, PWideChar(IntToStr(Port)), @InAddrInfo, @POutAddrInfo) <> 0) then
     begin
       LastErr := WSAGetLastError;
-      AppendLog('%s.getaddrinfo失败, ERR=%d,%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
+      AppendLog('%s.Listen.getaddrinfo, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
       Exit;
     end;
 
@@ -1548,7 +1514,7 @@ begin
         begin
           LastErr := WSAGetLastError;
           Iocp.Winsock2.closesocket(ListenSocket);
-          AppendLog('%s.绑定监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
+          AppendLog('%s.Listen.bind(Port=%d, Socket=%d), ERROR %d=%s', [ClassName, Port, ListenSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
           Exit;
         end;
 
@@ -1556,14 +1522,14 @@ begin
         begin
           LastErr := WSAGetLastError;
           Iocp.Winsock2.closesocket(ListenSocket);
-          AppendLog('%s.启动监听端口(%d)失败, ERR=%d,%s', [ClassName, Port, LastErr, SysErrorMessage(LastErr)], ltWarning);
+          AppendLog('%s.Listen.listen(Port=%d, Socket=%d), ERROR %d=%s', [ClassName, Port, ListenSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
           Exit;
         end;
 
         if not AssociateSocketWithCompletionPort(ListenSocket, nil) then
         begin
           Iocp.Winsock2.closesocket(ListenSocket);
-          AppendLog('%s.绑定监听端口(%d)到IOCP失败', [ClassName, Port], ltWarning);
+          AppendLog('%s.Listen.AssociateSocketWithCompletionPort(Port=%d, Socket=%d) failed', [ClassName, Port, ListenSocket], ltWarning);
           Exit;
         end;
 
@@ -1635,9 +1601,7 @@ begin
       case PerIoData.Operation of
         iotAccept:     RequestAcceptComplete(PerIoData);
         iotConnect:    RequestConnectComplete(Connection);
-        {$ifdef __REUSE_SOCKET__}
         iotDisconnect: RequestDisconnectComplete(Connection);
-        {$endif}
         iotReadZero:   RequestReadZeroComplete(Connection, PerIoData);
         iotRead:       RequestReadComplete(Connection, PerIoData);
         iotWrite:      RequestWriteComplete(Connection, PerIoData);
@@ -1647,7 +1611,7 @@ begin
     end;
   except
     on e: Exception do
-      AppendLog('%s.ProcessRequest, ERROR %s=%s', [ClassName, e.ClassName, e.Message], ltException);
+      AppendLog('%s.ProcessRequest ERROR %s=%s', [ClassName, e.ClassName, e.Message], ltException);
   end;
 end;
 
@@ -1684,8 +1648,8 @@ begin
       if not AssociateSocketWithCompletionPort(PerIoData.ClientSocket, Connection) then
       begin
         AppendLog(
-          'RequestAcceptComplete.AssociateSocketWithCompletionPort failed, Socket=%d',
-          [PerIoData.ClientSocket],
+          '%s.RequestAcceptComplete.AssociateSocketWithCompletionPort failed, Socket=%d',
+          [ClassName, PerIoData.ClientSocket],
           ltWarning);
         Connection.Release;
         Exit;
@@ -1776,27 +1740,18 @@ begin
   end;
 end;
 
-{$ifdef __REUSE_SOCKET__}
 procedure TIocpTcpSocket.RequestDisconnectComplete(
   Connection: TIocpSocketConnection);
 begin
   try
-    if (Connection.FConnectionSource = csAccept) then
-    begin
-      TMonitor.Enter(FAcceptSocketPool);
-      FAcceptSocketPool.Push(Connection.Socket);
-      TMonitor.Exit(FAcceptSocketPool);
-    end else
-    begin
-      TMonitor.Enter(FConnectSocketPool);
-      FConnectSocketPool.Push(Connection.Socket);
-      TMonitor.Exit(FConnectSocketPool);
-    end;
+    Connection.Release;
+    {$IFDEF __TIME_OUT_TIMER__}
+    Connection.FTimer.Release;
+    {$ENDIF}
   finally
-    Connection.Release; // 对应 ReuseSocket 中的 AddRef;
+    Connection.Release; // 对应 Disconnect 中的 AddRef;
   end;
 end;
-{$endif}
 
 procedure TIocpTcpSocket.RequestReadZeroComplete(
   Connection: TIocpSocketConnection; PerIoData: PIocpPerIoData);
@@ -1891,13 +1846,12 @@ begin
 end;
 
 procedure TIocpTcpSocket.CloseSocket(Socket: TSocket);
-var
-	lingerStruct: TLinger;
+//var
+//	lingerStruct: TLinger;
 begin
-	lingerStruct.l_onoff := 1;
+{	lingerStruct.l_onoff := 1;
   lingerStruct.l_linger := 0;
-  setsockopt(Socket, SOL_SOCKET, SO_LINGER, PAnsiChar(@lingerStruct), SizeOf(lingerStruct));
-//  CancelIo(Socket);
+  setsockopt(Socket, SOL_SOCKET, SO_LINGER, PAnsiChar(@lingerStruct), SizeOf(lingerStruct));}
 
   Iocp.Winsock2.shutdown(Socket, SD_BOTH);
   Iocp.Winsock2.closesocket(Socket);
@@ -2031,6 +1985,20 @@ begin
   finally
     FListenThreadsLocker.Leave;
   end;
+end;
+
+procedure TIocpTcpSocket.TrackSocketStatus(Socket: TSocket);
+var
+  OptLen, OptVal: Integer;
+  LastErr: DWORD;
+begin
+  OptLen := SizeOf(OptVal);
+  if (getsockopt(Socket, SOL_SOCKET, SO_ERROR, PAnsiChar(@OptVal), OptLen) = SOCKET_ERROR) then
+  begin
+    LastErr := GetLastError;
+    AppendLog(Format('getsockopt.SO_ERROR failed, IocpHandle=%d, Socket=%d, ERROR %d=%s', [FIocpHandle, Socket, LastErr, SysErrorMessage(LastErr)]), ltWarning);
+  end else
+    AppendLog(Format('getsockopt.SO_ERROR success, IocpHandle=%d, Socket=%d, OptVal=%d', [FIocpHandle, Socket, OptVal]), ltWarning);
 end;
 
 function TIocpTcpSocket.TriggerClientConnected(
