@@ -448,7 +448,7 @@ begin
   SetLength(U8Str, L);
   i := 1;
   J := 0;
-  while (i <= L){ and (s[i] <> '&')} do
+  while (i <= L) do
   begin
     Ch := AnsiChar(s[i]);
     if Ch = '%' then
