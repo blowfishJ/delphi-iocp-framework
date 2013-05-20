@@ -509,7 +509,6 @@ end;
 procedure TIocpSocketConnection.Disconnect;
 var
   PerIoData: PIocpPerIoData;
-  LastErr: Integer;
 begin
   if (InterlockedExchange(FDisconnected, 1) <> 0) then Exit;
 
@@ -523,9 +522,6 @@ begin
   if not DisconnectEx(FSocket, PWSAOverlapped(PerIoData), 0, 0)
     and (WSAGetLastError <> WSA_IO_PENDING) then
   begin
-    LastErr := WSAGetLastError;
-    if not ErrorIsNorma(LastErr) then
-      AppendLog('%s.Socket%d ReuseSocket.DisconnectEx ERROR %d=%s', [ClassName, FSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
     Release; // 对应函数开头的 AddRef
     Iocp.Winsock2.closesocket(FSocket);
     Owner.FreeIoData(PerIoData);
