@@ -143,6 +143,7 @@ type
     procedure _TriggerClientRecvData(Buf: Pointer; Len: Integer);
     procedure _TriggerClientSentData(Buf: Pointer; Len: Integer);
     function _Send(Buf: Pointer; Size: Integer): Integer;
+    procedure _CloseSocket;
   protected
     procedure Initialize; override;
     procedure Finalize; override;
@@ -340,7 +341,6 @@ type
     function Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Boolean; overload;
     function Listen(Port: Word; InitAcceptNum: Integer): Boolean; overload;
     procedure StopListen(ListenSocket: TSocket);
-    procedure CloseSocket(Socket: TSocket);
     function AsyncConnect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer = nil): TSocket;
     function Connect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer = nil; ConnectTimeout: DWORD = 10000): TIocpSocketConnection;
     procedure DisconnectAll;
@@ -501,7 +501,7 @@ begin
   Result := (InterlockedDecrement(FRefCount) = 0);
   if not Result then Exit;
 
-  Owner.CloseSocket(FSocket);
+  _CloseSocket;
   Owner._TriggerClientDisconnected(Self);
   Owner.FreeConnection(Self);
 end;
@@ -523,7 +523,7 @@ begin
     and (WSAGetLastError <> WSA_IO_PENDING) then
   begin
     Release; // 对应函数开头的 AddRef
-    Iocp.Winsock2.closesocket(FSocket);
+    _CloseSocket;
     Owner.FreeIoData(PerIoData);
 
     Release;
@@ -672,6 +672,18 @@ begin
   FTimer.OnTimer := OnTimerExecute;
   FTimer.OnDestroy := OnTimerDestroy;
   {$ENDIF}
+end;
+
+procedure TIocpSocketConnection._CloseSocket;
+//var
+//	lingerStruct: TLinger;
+begin
+{	lingerStruct.l_onoff := 1;
+  lingerStruct.l_linger := 0;
+  setsockopt(FSocket, SOL_SOCKET, SO_LINGER, PAnsiChar(@lingerStruct), SizeOf(lingerStruct));}
+
+  if (FSocket <> 0) then
+    Iocp.Winsock2.closesocket(FSocket);
 end;
 
 function TIocpSocketConnection._Send(Buf: Pointer; Size: Integer): Integer;
@@ -1839,18 +1851,6 @@ procedure TIocpTcpSocket.SetConnectionClass(
   const Value: TIocpSocketConnectionClass);
 begin
   FConnectionPool.ObjectClass := Value;
-end;
-
-procedure TIocpTcpSocket.CloseSocket(Socket: TSocket);
-//var
-//	lingerStruct: TLinger;
-begin
-{	lingerStruct.l_onoff := 1;
-  lingerStruct.l_linger := 0;
-  setsockopt(Socket, SOL_SOCKET, SO_LINGER, PAnsiChar(@lingerStruct), SizeOf(lingerStruct));}
-
-  Iocp.Winsock2.shutdown(Socket, SD_BOTH);
-  Iocp.Winsock2.closesocket(Socket);
 end;
 
 procedure TIocpTcpSocket.StartupWorkers;
