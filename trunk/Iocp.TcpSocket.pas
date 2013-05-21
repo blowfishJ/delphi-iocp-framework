@@ -1172,10 +1172,10 @@ var
   ListenData: TIocpListenData;
   i: Integer;
 begin
-  if (FListenList.Count >= MAX_LISTEN_SOCKETS) then Exit(False);
-
   TMonitor.Enter(FListenList);
   try
+    if (FListenList.Count >= MAX_LISTEN_SOCKETS) then Exit(False);
+
     ListenData.Socket := ListenSocket;
     ListenData.AiFamily := AiFamily;
     ListenData.InitAcceptNum := InitAcceptNum;
