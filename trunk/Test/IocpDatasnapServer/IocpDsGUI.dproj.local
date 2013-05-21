@@ -2,11 +2,8 @@
 <BorlandProject>
 	<Transactions>
     <Transaction>2013/03/12 15:03:37.000.759,C:\Users\ZY\Documents\RAD Studio\Projects\Project1.dproj=D:\VCL\IOCP\Test\IocpDatasnapServer\IocpDsGUI.dproj</Transaction>
-    <Transaction>2013/03/12 16:43:51.000.339,D:\VCL\IOCP\Test\IocpDatasnapServer\IocpDsServer.pas=D:\VCL\IOCP\Test\IocpDatasnapServer\DsServer.pas</Transaction>
     <Transaction>2013/03/12 16:44:11.000.149,D:\VCL\IOCP\Test\IocpDatasnapServer\IocpDsWebModule.dfm=D:\VCL\IOCP\Test\IocpDatasnapServer\EsWebModule.dfm</Transaction>
     <Transaction>2013/03/12 16:44:16.000.898,D:\VCL\IOCP\Test\IocpDatasnapServer\IocpDsServerMethods.dfm=D:\VCL\IOCP\Test\IocpDatasnapServer\EsServerMethods.dfm</Transaction>
     <Transaction>2013/03/12 16:44:32.000.915,D:\VCL\IOCP\Test\IocpDatasnapServer\IocpDsForm.dfm=D:\VCL\IOCP\Test\IocpDatasnapServer\EsGui.dfm</Transaction>
-    <Transaction>2013/03/12 16:56:06.000.806,=D:\VCL\IOCP\Test\IocpDatasnapServer\images\expand.png</Transaction>
-    <Transaction>2013/03/12 16:56:27.000.364,=D:\VCL\IOCP\Test\IocpDatasnapServer\js\connection.js</Transaction>
   </Transactions>
 </BorlandProject>
