@@ -230,24 +230,40 @@ type
   {
     *** Accept线程 ***
     用于在AcceptEx套接字不足时生成新的套接字
+    最多同时可以处理 WSA_MAXIMUM_WAIT_EVENTS - 2 (62) 个监听
   }
   TIocpAcceptThread = class(TThread)
+  private const
+    MAX_LISTEN_SOCKETS = WSA_MAXIMUM_WAIT_EVENTS - 2;
+    EVENT_NEW_LISTEN = 0;
+    EVENT_QUIT = 1;
+  private type
+    TIocpListenData = record
+      Socket: TSocket;
+      AiFamily: Integer;
+      InitAcceptNum: Integer;
+      AcceptEvent: THandle;
+    end;
+
+    TIocpListenList = TList<TIocpListenData>;
+    TIocpEvents = TArray<THandle>;
   private
     FOwner: TIocpTcpSocket;
-    FListenSocket: TSocket;
-    FInitAcceptNum: Integer;
-    FAiFamily: Integer;
-    FShutdownEvent: THandle;
+    FListenList: TIocpListenList;
+    FSysEvents, FAllEvents: TIocpEvents;
+
+    procedure Cleanup;
   protected
     procedure Execute; override;
   public
-    constructor Create(IocpSocket: TIocpTcpSocket; ListenSocket: TSocket; AiFamily, InitAcceptNum: Integer); reintroduce;
+    constructor Create(IocpSocket: TIocpTcpSocket); reintroduce;
+    destructor Destroy; override;
 
+    function NewListen(ListenSocket: TSocket; AiFamily, InitAcceptNum: Integer): Boolean;
+    function StopListen(ListenSocket: TSocket): Boolean;
+    procedure Reset;
     procedure Quit;
-    property ListenSocket: TSocket read FListenSocket;
   end;
-
-  TSocketPool = class(TStack<TSocket>);
 
   TIocpNotifyEvent = function(Sender: TObject; Client: TIocpSocketConnection): Boolean of object;
   TIocpDataEvent = function(Sender: TObject; Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean of object;
@@ -267,8 +283,7 @@ type
     FPerIoDataPool: TIocpMemoryPool;
     FConnectionList, FIdleConnectionList: TIocpSocketConnectionDictionary;
     FConnectionListLocker: TCriticalSection;
-    FListenThreads: TList;
-    FListenThreadsLocker: TCriticalSection;
+    FAcceptThread: TIocpAcceptThread;
     {$IFDEF __TIME_OUT_TIMER__}
     FTimerQueue: TIocpTimerQueue;
     FTimeout: DWORD;
@@ -1045,89 +1060,185 @@ end;
 
 { TIocpAcceptThread }
 
-constructor TIocpAcceptThread.Create(IocpSocket: TIocpTcpSocket;
-  ListenSocket: TSocket; AiFamily, InitAcceptNum: Integer);
+constructor TIocpAcceptThread.Create(IocpSocket: TIocpTcpSocket);
 begin
   inherited Create(True);
-
   FreeOnTerminate := True;
 
   FOwner := IocpSocket;
-  FAiFamily := AiFamily;
-  FInitAcceptNum := InitAcceptNum;
-  FListenSocket := ListenSocket;
-  FShutdownEvent := CreateEvent(nil, True, False, nil);
+  FListenList := TIocpListenList.Create;
+  SetLength(FSysEvents, 2);
+  FSysEvents[0] := CreateEvent(nil, True, False, nil); // New listen
+  FSysEvents[1] := CreateEvent(nil, True, False, nil); // Quit
+
+  Reset;
 
   Suspended := False;
+end;
+
+destructor TIocpAcceptThread.Destroy;
+begin
+  FreeAndNil(FListenList);
+  inherited Destroy;
 end;
 
 procedure TIocpAcceptThread.Execute;
 var
   i: Integer;
+  ListenData: TIocpListenData;
   LastErr: Integer;
-  AcceptEvents: array[0..1] of THandle;
   RetEvents: TWSANetworkEvents;
   dwRet: DWORD;
 begin
-//  AppendLog('%s.AcceptThread %d start', [FOwner.ClassName, ThreadID]);
   try
-    for i := 1 to FInitAcceptNum do
-      FOwner.PostNewAcceptEx(FListenSocket, FAiFamily);
+    while not Terminated do
+    begin
+      ResetEvent(FSysEvents[EVENT_NEW_LISTEN]);
 
-    AcceptEvents[0] := WSACreateEvent; // 新建一个事件用于绑定 FD_ACCEPT
-    AcceptEvents[1] := FShutdownEvent;
-    try
-      // 绑定监听端口的ACCEPT事件，当没有足够的Accept套接字时就会触发该事件
-      WSAEventSelect(FListenSocket, AcceptEvents[0], FD_ACCEPT);
+      // 等待退出或者ACCEPT事件
+      dwRet := WSAWaitForMultipleEvents(Length(FAllEvents), @FAllEvents[0], False, INFINITE, True);
 
-      while not Terminated do
+      // 收到退出事件通知
+      if (dwRet = WSA_WAIT_EVENT_0 + EVENT_QUIT) or (dwRet = WSA_WAIT_FAILED) or Terminated then Break;
+
+      // 有新的监听加入
+      if (dwRet = WSA_WAIT_EVENT_0 + EVENT_NEW_LISTEN) then Continue;
+
+      // 取出监听数据
+      TMonitor.Enter(FListenList);
+      ListenData := FListenList[dwRet - WSA_WAIT_EVENT_0 - Length(FSysEvents)];
+      TMonitor.Exit(FListenList);
+
+      // 读取事件状态
+      if (WSAEnumNetworkEvents(ListenData.Socket, ListenData.AcceptEvent, @RetEvents) = SOCKET_ERROR) then
       begin
-        // 等待退出或者ACCEPT事件
-        dwRet := WSAWaitForMultipleEvents(2, @AcceptEvents[0], False, INFINITE, True);
+        LastErr := WSAGetLastError;
+        AppendLog('%s.WSAEnumNetworkEvents(Socket=%d), ERROR %d=%s', [ClassName, ListenData.Socket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+        Break;
+      end;
 
-        // 收到退出事件通知
-        if (dwRet = WSA_WAIT_EVENT_0 + 1) or (dwRet = WSA_WAIT_FAILED) or Terminated then Break;
-
-        // 读取事件状态
-        if (WSAEnumNetworkEvents(FListenSocket, AcceptEvents[0], @RetEvents) = SOCKET_ERROR) then
+      // 如果ACCEPT事件触发，则投递新的Accept套接字
+      // 每次投递 FInitAcceptNum 个
+      if (RetEvents.lNetworkEvents and FD_ACCEPT = FD_ACCEPT) then
+      begin
+        if (RetEvents.iErrorCode[FD_ACCEPT_BIT] <> 0) then
         begin
           LastErr := WSAGetLastError;
-          AppendLog('%s.WSAEnumNetworkEvents, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
+          AppendLog('%s.WSAEnumNetworkEvents(Socket=%d), ERROR %d=%s', [ClassName, ListenData.Socket, LastErr, SysErrorMessage(LastErr)], ltWarning);
           Break;
         end;
 
-        // 如果ACCEPT事件触发，则投递新的Accept套接字
-        // 每次投递 FInitAcceptNum 个
-        if (RetEvents.lNetworkEvents and FD_ACCEPT = FD_ACCEPT) then
-        begin
-          if (RetEvents.iErrorCode[FD_ACCEPT_BIT] <> 0) then
-          begin
-            LastErr := WSAGetLastError;
-            AppendLog('%s.WSAEnumNetworkEvents, ERROR %d=%s', [ClassName, LastErr, SysErrorMessage(LastErr)], ltWarning);
-            Break;
-          end;
-
-          for i := 1 to FInitAcceptNum do
-          begin
-            if not FOwner.PostNewAcceptEx(FListenSocket, FAiFamily) then Break;
-          end;
-        end;
+        for i := 1 to ListenData.InitAcceptNum do
+          if not FOwner.PostNewAcceptEx(ListenData.Socket, ListenData.AiFamily) then Break;
       end;
-      Iocp.Winsock2.closesocket(FListenSocket);
-    finally
-      CloseHandle(AcceptEvents[0]);
-      CloseHandle(AcceptEvents[1]);
     end;
+
+    Cleanup;
   except
     on e: Exception do
       AppendLog('%s.Execute ERROR %s=%s', [ClassName, e.ClassName, e.Message], ltException);
   end;
-//  AppendLog('%s.AcceptThread %d exit', [FOwner.ClassName, ThreadID]);
 end;
 
 procedure TIocpAcceptThread.Quit;
 begin
-  SetEvent(FShutdownEvent);
+  SetEvent(FSysEvents[EVENT_QUIT]);
+end;
+
+procedure TIocpAcceptThread.Reset;
+  function GetEvents: TIocpEvents;
+  var
+    i: Integer;
+  begin
+    SetLength(Result, Length(FSysEvents) + FListenList.Count);
+    for i := Low(FSysEvents) to High(FSysEvents) do
+      Result[i] := FSysEvents[i];
+    TMonitor.Enter(FListenList);
+    try
+      for i := 0 to FListenList.Count - 1 do
+        Result[i + Length(FSysEvents)] := FListenList[i].AcceptEvent;
+    finally
+      TMonitor.Exit(FListenList);
+    end;
+  end;
+begin
+  FAllEvents := GetEvents;
+  SetEvent(FSysEvents[EVENT_NEW_LISTEN]);
+end;
+
+function TIocpAcceptThread.NewListen(ListenSocket: TSocket; AiFamily,
+  InitAcceptNum: Integer): Boolean;
+var
+  ListenData: TIocpListenData;
+  i: Integer;
+begin
+  if (FListenList.Count >= MAX_LISTEN_SOCKETS) then Exit(False);
+
+  TMonitor.Enter(FListenList);
+  try
+    ListenData.Socket := ListenSocket;
+    ListenData.AiFamily := AiFamily;
+    ListenData.InitAcceptNum := InitAcceptNum;
+    for i := 1 to InitAcceptNum do
+      FOwner.PostNewAcceptEx(ListenSocket, AiFamily);
+
+    ListenData.AcceptEvent := WSACreateEvent;
+    WSAEventSelect(ListenSocket, ListenData.AcceptEvent, FD_ACCEPT);
+    FListenList.Add(ListenData);
+  finally
+    TMonitor.Exit(FListenList);
+  end;
+
+  Reset;
+  Result := True;
+end;
+
+function TIocpAcceptThread.StopListen(ListenSocket: TSocket): Boolean;
+var
+  ListenData: TIocpListenData;
+begin
+  Result := False;
+
+  TMonitor.Enter(FListenList);
+  try
+    for ListenData in FListenList do
+    begin
+      if (ListenData.Socket = ListenSocket) then
+      begin
+        Iocp.Winsock2.closesocket(ListenData.Socket);
+        CloseHandle(ListenData.AcceptEvent);
+        Result := True;
+        Break;
+      end;
+    end;
+  finally
+    TMonitor.Exit(FListenList);
+  end;
+
+  Reset;
+end;
+
+procedure TIocpAcceptThread.Cleanup;
+var
+  ListenData: TIocpListenData;
+  Event: THandle;
+begin
+  TMonitor.Enter(FListenList);
+  try
+    for ListenData in FListenList do
+    begin
+      Iocp.Winsock2.closesocket(ListenData.Socket);
+      CloseHandle(ListenData.AcceptEvent);
+    end;
+    FListenList.Clear;
+  finally
+    TMonitor.Exit(FListenList);
+  end;
+
+  for Event in FSysEvents do
+    CloseHandle(Event);
+  FSysEvents := nil;
+  FAllEvents := nil;
 end;
 
 { TIocpTcpSocket }
@@ -1141,8 +1252,6 @@ begin
   FConnectionList := TIocpSocketConnectionDictionary.Create(Self);
   FConnectionListLocker := TCriticalSection.Create;
   FIdleConnectionList := TIocpSocketConnectionDictionary.Create(Self);
-  FListenThreads := TList.Create;
-  FListenThreadsLocker := TCriticalSection.Create;
 
   FIoThreadsNumber := IoThreadsNumber;
   FIocpHandle := 0;
@@ -1166,8 +1275,6 @@ begin
   FConnectionList.Free;
   FConnectionListLocker.Free;
   FIdleConnectionList.Free;
-  FListenThreads.Free;
-  FListenThreadsLocker.Free;
   FConnectionPool.Free;
   FPerIoDataPool.Clear;
   FPerIoDataPool.Release;
@@ -1185,15 +1292,6 @@ var
 begin
   Result := False;
 
-  {TMonitor.Enter(FAcceptSocketPool);
-  try
-    if (FAcceptSocketPool.Count > 0) then
-      ClientSocket := FAcceptSocketPool.Pop
-    else
-      ClientSocket := WSASocket(AiFamily, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
-  finally
-    TMonitor.Exit(FAcceptSocketPool);
-  end;}
   ClientSocket := WSASocket(AiFamily, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
   if (ClientSocket = INVALID_SOCKET) then
   begin
@@ -1541,12 +1639,7 @@ begin
           Exit;
         end;
 
-        try
-          FListenThreadsLocker.Enter;
-          FListenThreads.Add(TIocpAcceptThread.Create(Self, ListenSocket, Ptr.ai_family, InitAcceptNum));
-        finally
-          FListenThreadsLocker.Leave;
-        end;
+        FAcceptThread.NewListen(ListenSocket, Ptr.ai_family, InitAcceptNum);
 
         Ptr := Ptr.ai_next;
       end;
@@ -1886,6 +1979,9 @@ begin
     FIoThreadHandles[i] := FIoThreads[i].Handle;
   end;
 
+  // 创建监听线程
+  FAcceptThread := TIocpAcceptThread.Create(Self);
+
   {$IFDEF __TIME_OUT_TIMER__}
   // 创建时钟队列
   FTimerQueue := TIocpTimerQueue.Create;
@@ -1929,13 +2025,10 @@ begin
   end;
 
   // 关闭监听线程
-  FListenThreadsLocker.Enter;
-  try
-    for i := 0 to FListenThreads.Count - 1 do
-      TIocpAcceptThread(FListenThreads[i]).Quit;
-    FListenThreads.Clear;
-  finally
-    FListenThreadsLocker.Leave;
+  if Assigned(FAcceptThread) then
+  begin
+    FAcceptThread.Quit;
+    FAcceptThread := nil;
   end;
 
   // 关闭IO线程
@@ -1964,23 +2057,9 @@ begin
 end;
 
 procedure TIocpTcpSocket.StopListen(ListenSocket: TSocket);
-var
-  i: Integer;
 begin
-  FListenThreadsLocker.Enter;
-  try
-    for i := 0 to FListenThreads.Count - 1 do
-    begin
-      if (ListenSocket = TIocpAcceptThread(FListenThreads[i]).ListenSocket) then
-      begin
-        TIocpAcceptThread(FListenThreads[i]).Quit;
-        FListenThreads.Delete(i);
-        Break;
-      end;
-    end;
-  finally
-    FListenThreadsLocker.Leave;
-  end;
+  if Assigned(FAcceptThread) then
+    FAcceptThread.StopListen(ListenSocket);
 end;
 
 procedure TIocpTcpSocket.TrackSocketStatus(Socket: TSocket);
