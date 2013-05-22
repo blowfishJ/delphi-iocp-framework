@@ -1768,19 +1768,19 @@ begin
           FConnectionList[PerIoData.ClientSocket] := Connection;
         end;
       end;
-
-      // 将Socket邦定到IOCP
-      if not AssociateSocketWithCompletionPort(PerIoData.ClientSocket, Connection) then
-      begin
-        AppendLog(
-          '%s.RequestAcceptComplete.AssociateSocketWithCompletionPort failed, Socket=%d',
-          [ClassName, PerIoData.ClientSocket],
-          ltWarning);
-        Connection.Release;
-        Exit;
-      end;
     finally
       FConnectionListLocker.Leave;
+    end;
+
+    // 将Socket邦定到IOCP
+    if not AssociateSocketWithCompletionPort(PerIoData.ClientSocket, Connection) then
+    begin
+      AppendLog(
+        '%s.RequestAcceptComplete.AssociateSocketWithCompletionPort failed, Socket=%d',
+        [ClassName, PerIoData.ClientSocket],
+        ltWarning);
+      Connection.Release;
+      Exit;
     end;
 
     Connection.UpdateTick;
