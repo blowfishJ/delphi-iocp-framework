@@ -261,6 +261,7 @@ type
 
     function NewListen(ListenSocket: TSocket; AiFamily, InitAcceptNum: Integer): Boolean;
     function StopListen(ListenSocket: TSocket): Boolean;
+    function ListenCount: Integer;
     procedure Reset;
     procedure Quit;
   end;
@@ -353,6 +354,7 @@ type
     constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); reintroduce; overload;
     destructor Destroy; override;
 
+    // Host设置为''时，如果系统支持IPv6则会同时监听IPv4及IPv6
     function Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Boolean; overload;
     function Listen(Port: Word; InitAcceptNum: Integer): Boolean; overload;
     procedure StopListen(ListenSocket: TSocket);
@@ -1140,6 +1142,11 @@ begin
   end;
 end;
 
+function TIocpAcceptThread.ListenCount: Integer;
+begin
+  Result := FListenList.Count;
+end;
+
 procedure TIocpAcceptThread.Quit;
 begin
   SetEvent(FSysEvents[EVENT_QUIT]);
@@ -1582,9 +1589,11 @@ var
   ListenSocket: TSocket;
   InAddrInfo: TAddrInfoW;
   POutAddrInfo, Ptr: PAddrInfoW;
+  ListenCount: Integer;
   LastErr: Integer;
 begin
   Result := False;
+  if not Assigned(FAcceptThread) then Exit;  
 
   try
     // 如果传递了一个有效地址则监听该地址
@@ -1607,6 +1616,17 @@ begin
     end;
 
     try
+      {$region '检查监听个数是否已达上限'}
+      Ptr := POutAddrInfo;
+      ListenCount := FAcceptThread.ListenCount;
+      while (Ptr <> nil) do
+      begin
+        Inc(ListenCount);
+        Ptr := Ptr.ai_next;
+      end;
+      if (ListenCount > FAcceptThread.MAX_LISTEN_SOCKETS) then Exit;
+      {$endregion}
+
       Ptr := POutAddrInfo;
       while (Ptr <> nil) do
       begin
@@ -1639,7 +1659,11 @@ begin
           Exit;
         end;
 
-        FAcceptThread.NewListen(ListenSocket, Ptr.ai_family, InitAcceptNum);
+        if not FAcceptThread.NewListen(ListenSocket, Ptr.ai_family, InitAcceptNum) then
+        begin
+          Iocp.Winsock2.closesocket(ListenSocket);
+          Exit;
+        end;
 
         Ptr := Ptr.ai_next;
       end;
