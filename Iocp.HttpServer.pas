@@ -289,7 +289,7 @@ begin
   if (J <= 0) then
     FRawParams := ''
   else begin
-    FRawParams := Copy(FRawPath, J + 1, Length(FRawPath));
+    FRawParams := Copy(FRawPath, J + 1, MaxInt);
     FRawPath   := Copy(FRawPath, 1, J - 1);
   end;
 
@@ -302,7 +302,7 @@ begin
   if (J <= 0) then
     FParams := ''
   else begin
-    FParams := Copy(FPath, J + 1, Length(FPath));
+    FParams := Copy(FPath, J + 1, MaxInt);
     FPath   := Copy(FPath, 1, J - 1);
   end;
   Inc(I);
@@ -334,25 +334,25 @@ begin
     else if StrLIComp(@RequestLine[1], 'Content-Length:', 15) = 0 then
     begin
       FRequestHasContentLength := TRUE;
-      FRequestContentLength := StrToInt64Def(Copy(RequestLine, SpacePos, Length(RequestLine)), -1);
+      FRequestContentLength := StrToInt64Def(Copy(RequestLine, SpacePos, MaxInt), -1);
     end
     else if StrLIComp(@RequestLine[1], 'Accept:', 7) = 0 then
-      FRequestAccept:= Copy(RequestLine, SpacePos, Length(RequestLine))
+      FRequestAccept:= Copy(RequestLine, SpacePos, MaxInt)
     else if StrLIComp(@RequestLine[1], 'Referer:', 8) = 0 then
-      FRequestReferer := Copy(RequestLine, SpacePos, Length(RequestLine))
+      FRequestReferer := Copy(RequestLine, SpacePos, MaxInt)
     else if StrLIComp(@RequestLine[1], 'Accept-Language:', 16) = 0 then
-      FRequestAcceptLanguage := Copy(RequestLine, SpacePos, Length(RequestLine))
+      FRequestAcceptLanguage := Copy(RequestLine, SpacePos, MaxInt)
     else if StrLIComp(@RequestLine[1], 'Accept-Encoding:', 16) = 0 then
-      FRequestAcceptEncoding := Copy(RequestLine, SpacePos, Length(RequestLine))
+      FRequestAcceptEncoding := Copy(RequestLine, SpacePos, MaxInt)
     else if StrLIComp(@RequestLine[1], 'User-Agent:', 11) = 0 then
-      FRequestUserAgent := Copy(RequestLine, SpacePos, Length(RequestLine))
+      FRequestUserAgent := Copy(RequestLine, SpacePos, MaxInt)
     else if StrLIComp(@RequestLine[1], 'Authorization:', 14) = 0 then
-      FRequestAuth := Copy(RequestLine, SpacePos, Length(RequestLine))
+      FRequestAuth := Copy(RequestLine, SpacePos, MaxInt)
     else if StrLIComp(@RequestLine[1], 'Cookie:', 7) = 0 then
-      FRequestCookies := Copy(RequestLine, SpacePos, Length(RequestLine))
+      FRequestCookies := Copy(RequestLine, SpacePos, MaxInt)
     else if StrLIComp(@RequestLine[1], 'Host:', 5) = 0 then
     begin
-      FRequestHost := Copy(RequestLine, SpacePos, Length(RequestLine));
+      FRequestHost := Copy(RequestLine, SpacePos, MaxInt);
       J := Pos(':', FRequestHost);
       if J > 0 then
       begin
@@ -366,7 +366,7 @@ begin
     end
     else if StrLIComp(@RequestLine[1], 'Connection:', 11) = 0 then
     begin
-      FRequestConnection := Copy(RequestLine, SpacePos, Length(RequestLine));
+      FRequestConnection := Copy(RequestLine, SpacePos, MaxInt);
       // HTTP/1.0 默认KeepAlive=False，只有显示指定了Connection: keep-alive才认为KeepAlive=True
       // HTTP/1.1 默认KeepAlive=True，只有显示指定了Connection: close才认为KeepAlive=False
       if FHttpVerNum = 10 then
@@ -375,7 +375,7 @@ begin
         FKeepAlive := False;
     end
     else if StrLIComp(@RequestLine[1], 'X-Forwarded-For:', 16) = 0 then
-      FXForwardedFor := Copy(RequestLine, SpacePos, Length(RequestLine));
+      FXForwardedFor := Copy(RequestLine, SpacePos, MaxInt);
   end;
 
   Result := True;
@@ -566,7 +566,7 @@ function TIocpHttpConnection.AnswerBuf(const Header: string;
   Buf: Pointer; Size: Integer): Boolean;
 var
   FixedHeader: RawByteString;
-  Len{, BlockSize}: Integer;
+  Len: Integer;
 begin
   // FResponseSize必须准确指定发送的数据包大小
   // 用于在发送完之后(Owner.TriggerClientSentData)断开客户端连接
@@ -584,15 +584,6 @@ begin
   end;
 
   try
-(*    while (Size > 0) do
-    begin
-      BlockSize := Min(4096, Size);
-      if (Send(Buf, BlockSize) <> BlockSize) then Exit(False);
-      Inc(PAnsiChar(Buf), BlockSize);
-      Dec(Size, BlockSize);
-    end;
-    Result := True;*)
-
     Result := (Send(Buf, Size) = Size);
   except
     on e: Exception do

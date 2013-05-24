@@ -498,7 +498,7 @@ constructor TIocpSocketConnection.Create(AOwner: TObject);
 begin
   inherited Create(AOwner);
 
-  FRcvBuffer := IoCachePool.GetMemory;
+  FRcvBuffer := IoCachePool.GetMemory(False);
 end;
 
 destructor TIocpSocketConnection.Destroy;
@@ -754,7 +754,7 @@ var
   BufSize, BlockSize: Integer;
 begin
   BufSize := FileCachePool.BlockSize;
-  Buf := FileCachePool.GetMemory;
+  Buf := FileCachePool.GetMemory(False);
   try
     Stream.Position := 0;
     while True do
@@ -918,7 +918,7 @@ begin
 
   IncPendingSend;
 
-  SndBuf := IoCachePool.GetMemory;
+  SndBuf := IoCachePool.GetMemory(False);
   CopyMemory(SndBuf, Buf, Size);
 
   PerIoData := Owner.AllocIoData(FSocket, iotWrite);
@@ -1364,11 +1364,9 @@ end;
 function TIocpTcpSocket.AllocIoData(Socket: TSocket;
   Operation: TIocpOperationType): PIocpPerIoData;
 begin
-  Result := FPerIoDataPool.GetMemory;
+  Result := FPerIoDataPool.GetMemory(True);
   Result.ClientSocket := Socket;
   Result.Operation := Operation;
-
-  ZeroMemory(@Result.Overlapped, SizeOf(TWSAOverlapped));
 end;
 
 procedure TIocpTcpSocket.DisconnectAll;
@@ -1983,7 +1981,7 @@ begin
   if (FIoThreadsNumber <= 0) then
   begin
     GetSystemInfo(si);
-    NumberOfThreads := si.dwNumberOfProcessors * 2;
+    NumberOfThreads := si.dwNumberOfProcessors;
   end
   else
     NumberOfThreads := Min(FIoThreadsNumber, 64);
