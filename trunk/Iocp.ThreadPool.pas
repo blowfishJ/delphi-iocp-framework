@@ -162,16 +162,13 @@ begin
   if (FNumberOfThreads <= 0) then
   begin
     GetSystemInfo(si);
-    NumberOfThreads := si.dwNumberOfProcessors * 2 + 2;
+    NumberOfThreads := si.dwNumberOfProcessors;
   end else
     NumberOfThreads := Min(FNumberOfThreads, 64); // maximum count for WaitForMultipleObjects()
 
   // 创建完成端口
   // NumberOfConcurrentThreads = 0 表示每个CPU保持一个并发线程
-  // 经实际测试发现：并发线程数如果只保持每个CPU一个，在IOCP大并发请求的处理中会出现待处理请求大量堆积
-  // 从而出现内存的大量消耗，将并发数设置为上面计算出来的NumberOfThreads能保证逻辑请求尽可能快的被响应
-  // 这样内存消耗几乎不会出现什么大的波动（收发速度会略微降低，不过这点牺牲是完全值得的）
-  FIocpHandle := Iocp.ApiFix.CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, NumberOfThreads);
+  FIocpHandle := Iocp.ApiFix.CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
   if (FIocpHandle = INVALID_HANDLE_VALUE) then
     raise Exception.Create('IocpThreadPool创建IOCP对象失败');
 

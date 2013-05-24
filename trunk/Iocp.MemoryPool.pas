@@ -1,7 +1,5 @@
 unit Iocp.MemoryPool;
 
-{$define __ZERO_MEMORY__}
-
 interface
 
 uses
@@ -13,6 +11,7 @@ type
     FRefCount: Integer;
     FHeapHandle: THandle;
     FBlockSize, FMaxFreeBlocks: Integer;
+    FAllocFlag: DWORD;
     FFreeMemoryBlockList: TList; // 经过实际测试，使用Classes.TList比Collections.TList<>效率更高
     FUsedMemoryBlockList: TList;
     FLocker: TCriticalSection;
@@ -30,7 +29,7 @@ type
     procedure Unlock;
     function AddRef: Integer;
     function Release: Boolean;
-    function GetMemory: Pointer;
+    function GetMemory(Zero: Boolean): Pointer;
     procedure FreeMemory(const P: Pointer);
     procedure Clear;
 
@@ -97,7 +96,7 @@ begin
   if Result then Free;
 end;
 
-function TIocpMemoryPool.GetMemory: Pointer;
+function TIocpMemoryPool.GetMemory(Zero: Boolean): Pointer;
 var
   AllocFlag: DWORD;
 begin
@@ -115,11 +114,10 @@ begin
     // 如果没有空闲内存块，分配新的内存块
     if (Result = nil) then
     begin
-      {$ifdef __ZERO_MEMORY__}
-      AllocFlag := 0;
-      {$else}
-      AllocFlag := $08;
-      {$endif}
+      if Zero then
+        AllocFlag := $08
+      else
+        AllocFlag := 0;
       Result := HeapAlloc(FHeapHandle, AllocFlag, FBlockSize);
       AddRef;
     end;
