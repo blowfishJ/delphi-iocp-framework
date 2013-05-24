@@ -1,5 +1,11 @@
 unit Iocp.MemoryPool;
 
+{* 实际测试发现,32位下小块内存(<4K)的分配,Delphi自带的GetMem比HeapAlloc效率高很多
+ * 即使GetMem + ZeroMemory也比HeapAlloc带$08(清0内存)标志快
+ * 但是64位下或者大块内存(>4K)的分配HeapAlloc/HealFree性能略高
+ *}
+{$define __HEAP_ALLOC__}
+
 interface
 
 uses
@@ -7,11 +13,16 @@ uses
 
 type
   TIocpMemoryPool = class
+  private const
+    {$ifdef __HEAP_ALLOC__}
+    HEAP_ALLOC_FLAG: array [Boolean] of DWORD = ($00, $08);
+    {$endif}
   private
-    FRefCount: Integer;
+    {$ifdef __HEAP_ALLOC__}
     FHeapHandle: THandle;
+    {$endif}
+    FRefCount: Integer;
     FBlockSize, FMaxFreeBlocks: Integer;
-    FAllocFlag: DWORD;
     FFreeMemoryBlockList: TList; // 经过实际测试，使用Classes.TList比Collections.TList<>效率更高
     FUsedMemoryBlockList: TList;
     FLocker: TCriticalSection;
@@ -21,16 +32,19 @@ type
     function GetUsedBlocks: Integer;
     function GetUsedBlocksSize: Integer;
     procedure SetMaxFreeBlocks(MaxFreeBlocks: Integer);
+  protected
+    function RealAlloc(Size: Integer; Zero: Boolean): Pointer; inline;
+    procedure RealFree(P: Pointer); inline;
   public
     constructor Create(BlockSize, MaxFreeBlocks: Integer); virtual;
     destructor Destroy; override;
 
-    procedure Lock;
-    procedure Unlock;
-    function AddRef: Integer;
-    function Release: Boolean;
+    procedure Lock; inline;
+    procedure Unlock; inline;
+    function AddRef: Integer; inline;
+    function Release: Boolean; inline;
     function GetMemory(Zero: Boolean): Pointer;
-    procedure FreeMemory(const P: Pointer);
+    procedure FreeMemory(P: Pointer);
     procedure Clear;
 
     property MaxFreeBlocks: Integer read FMaxFreeBlocks write SetMaxFreeBlocks;
@@ -60,7 +74,9 @@ begin
   FFreeMemoryBlockList := TList.Create;
   FUsedMemoryBlockList := TList.Create;
   FLocker := TCriticalSection.Create;
+  {$ifdef __HEAP_ALLOC__}
   FHeapHandle := GetProcessHeap;
+  {$endif}
   FRefCount := 1;
 end;
 
@@ -90,6 +106,26 @@ begin
   Result := InterlockedIncrement(FRefCount);
 end;
 
+function TIocpMemoryPool.RealAlloc(Size: Integer; Zero: Boolean): Pointer;
+begin
+  {$ifdef __HEAP_ALLOC__}
+  Result := HeapAlloc(FHeapHandle, HEAP_ALLOC_FLAG[Zero], Size);
+  {$else}
+  GetMem(Result, Size);
+  if (Result <> nil) and Zero then
+    FillChar(Result^, Size, 0);
+  {$endif}
+end;
+
+procedure TIocpMemoryPool.RealFree(P: Pointer);
+begin
+  {$ifdef __HEAP_ALLOC__}
+  HeapFree(FHeapHandle, 0, P);
+  {$else}
+  FreeMem(P);
+  {$endif}
+end;
+
 function TIocpMemoryPool.Release: Boolean;
 begin
   Result := (InterlockedDecrement(FRefCount) = 0);
@@ -97,8 +133,6 @@ begin
 end;
 
 function TIocpMemoryPool.GetMemory(Zero: Boolean): Pointer;
-var
-  AllocFlag: DWORD;
 begin
   Lock;
   try
@@ -114,11 +148,7 @@ begin
     // 如果没有空闲内存块，分配新的内存块
     if (Result = nil) then
     begin
-      if Zero then
-        AllocFlag := $08
-      else
-        AllocFlag := 0;
-      Result := HeapAlloc(FHeapHandle, AllocFlag, FBlockSize);
+      Result := RealAlloc(FBlockSize, Zero);
       AddRef;
     end;
 
@@ -133,7 +163,7 @@ begin
   end;
 end;
 
-procedure TIocpMemoryPool.FreeMemory(const P: Pointer);
+procedure TIocpMemoryPool.FreeMemory(P: Pointer);
 begin
   if (P = nil) then Exit;
 
@@ -148,7 +178,7 @@ begin
     // 否则释放内存
     else
     begin
-      HeapFree(FHeapHandle, 0, P);
+      RealFree(P);
       Release;
     end;
   finally
@@ -167,7 +197,7 @@ begin
     begin
       P := FFreeMemoryBlockList[FFreeMemoryBlockList.Count - 1];
       if (P <> nil) then
-        HeapFree(FHeapHandle, 0, P);
+        RealFree(P);
       FFreeMemoryBlockList.Delete(FFreeMemoryBlockList.Count - 1);
       Release;
     end;
@@ -177,7 +207,7 @@ begin
     begin
       P := FUsedMemoryBlockList[FUsedMemoryBlockList.Count - 1];
       if (P <> nil) then
-        HeapFree(FHeapHandle, 0, P);
+        RealFree(P);
       FUsedMemoryBlockList.Delete(FUsedMemoryBlockList.Count - 1);
       Release;
     end;
