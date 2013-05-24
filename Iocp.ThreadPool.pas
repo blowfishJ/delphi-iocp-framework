@@ -162,7 +162,7 @@ begin
   if (FNumberOfThreads <= 0) then
   begin
     GetSystemInfo(si);
-    NumberOfThreads := si.dwNumberOfProcessors;
+    NumberOfThreads := si.dwNumberOfProcessors * 2;
   end else
     NumberOfThreads := Min(FNumberOfThreads, 64); // maximum count for WaitForMultipleObjects()
 

@@ -38,8 +38,8 @@ ZY. 2012.04.19
 interface
 
 uses
-  Windows, Messages, Classes, SysUtils, SyncObjs, Math, Contnrs, System.Generics.Collections,
-  Iocp.Winsock2, Iocp.Wship6, Iocp.ApiFix, Iocp.ThreadPool, Iocp.ReadWriteLocker, Iocp.MemoryPool,
+  Windows, Messages, Classes, SysUtils, SyncObjs, Math, System.Generics.Collections,
+  Iocp.Winsock2, Iocp.Wship6, Iocp.ApiFix, Iocp.ThreadPool, Iocp.MemoryPool,
   Iocp.ObjectPool, Iocp.Buffer, Iocp.Queue, Iocp.TimerQueue, Iocp.Logger, Iocp.Utils;
 
 const
@@ -1981,7 +1981,7 @@ begin
   if (FIoThreadsNumber <= 0) then
   begin
     GetSystemInfo(si);
-    NumberOfThreads := si.dwNumberOfProcessors;
+    NumberOfThreads := si.dwNumberOfProcessors * 2;
   end
   else
     NumberOfThreads := Min(FIoThreadsNumber, 64);
