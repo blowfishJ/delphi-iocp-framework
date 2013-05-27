@@ -41,8 +41,6 @@ type
 
     procedure Lock; inline;
     procedure Unlock; inline;
-    function AddRef: Integer; inline;
-    function Release: Boolean; inline;
     function GetMemory(Zero: Boolean): Pointer;
     procedure FreeMemory(P: Pointer);
     procedure Clear;
@@ -101,11 +99,6 @@ begin
   FLocker.Leave;
 end;
 
-function TIocpMemoryPool.AddRef: Integer;
-begin
-  Result := InterlockedIncrement(FRefCount);
-end;
-
 function TIocpMemoryPool.RealAlloc(Size: Integer; Zero: Boolean): Pointer;
 begin
   {$ifdef __HEAP_ALLOC__}
@@ -126,18 +119,12 @@ begin
   {$endif}
 end;
 
-function TIocpMemoryPool.Release: Boolean;
-begin
-  Result := (InterlockedDecrement(FRefCount) = 0);
-  if Result then Free;
-end;
-
 function TIocpMemoryPool.GetMemory(Zero: Boolean): Pointer;
 begin
+  Result := nil;
+
   Lock;
   try
-    Result := nil;
-
     // 从空闲内存块列表中取一块
     if (FFreeMemoryBlockList.Count > 0) then
     begin
@@ -147,20 +134,17 @@ begin
 
     // 如果没有空闲内存块，分配新的内存块
     if (Result = nil) then
-    begin
       Result := RealAlloc(FBlockSize, Zero);
-      AddRef;
-    end;
 
+    // 将取得的内存块放入已使用内存块列表
     if (Result <> nil) then
-    begin
-      // 将取得的内存块放入已使用内存块列表
       FUsedMemoryBlockList.Add(Result);
-    end else
-      raise Exception.CreateFmt('分配内存块失败，块大小: %d', [FBlockSize]);
   finally
     Unlock;
   end;
+
+  if (Result = nil) then
+    raise Exception.CreateFmt('分配内存块失败，块大小: %d', [FBlockSize]);
 end;
 
 procedure TIocpMemoryPool.FreeMemory(P: Pointer);
@@ -177,10 +161,7 @@ begin
       FFreeMemoryBlockList.Add(P)
     // 否则释放内存
     else
-    begin
       RealFree(P);
-      Release;
-    end;
   finally
     Unlock;
   end;
@@ -191,6 +172,7 @@ var
   P: Pointer;
 begin
   Lock;
+
   try
     // 清空空闲内存
     while (FFreeMemoryBlockList.Count > 0) do
@@ -199,7 +181,6 @@ begin
       if (P <> nil) then
         RealFree(P);
       FFreeMemoryBlockList.Delete(FFreeMemoryBlockList.Count - 1);
-      Release;
     end;
 
     // 清空已使用内存
@@ -209,7 +190,6 @@ begin
       if (P <> nil) then
         RealFree(P);
       FUsedMemoryBlockList.Delete(FUsedMemoryBlockList.Count - 1);
-      Release;
     end;
   finally
     Unlock;
