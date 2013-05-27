@@ -137,9 +137,10 @@ end;
 
 function TIocpObjectPool.GetObject: TIocpObject;
 begin
+  Result := nil;
+
   Lock;
   try
-    Result := nil;
     if (FFreeObjectList.Count > 0) then
     begin
       Result := FFreeObjectList[FFreeObjectList.Count - 1];
@@ -153,11 +154,13 @@ begin
     begin
       Result.Initialize;
       FUsedObjectList.Add(Result);
-    end else
-      raise Exception.CreateFmt('分配对象失败(%s)', [FObjectClass.ClassName]);
+    end;
   finally
     Unlock;
   end;
+
+  if (Result = nil) then
+    raise Exception.CreateFmt('分配对象失败(%s)', [FObjectClass.ClassName]);
 end;
 
 function TIocpObjectPool.GetUsedObjects: Integer;

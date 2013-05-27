@@ -281,7 +281,7 @@ type
     FIoThreadHandles: array of THandle;
     FPendingRequest: Integer;
     FConnectionPool: TIocpObjectPool;
-    FPerIoDataPool: TIocpMemoryPool;
+    FPerIoDataPool, FIoCachePool, FFileCachePool: TIocpMemoryPool;
     FConnectionList, FIdleConnectionList: TIocpSocketConnectionDictionary;
     FConnectionListLocker: TCriticalSection;
     FAcceptThread: TIocpAcceptThread;
@@ -489,21 +489,18 @@ begin
   RegisterComponents('Iocp', [TIocpTcpSocket, TSimpleIocpTcpClient, TSimpleIocpTcpServer, TIocpLineSocket, TIocpLineServer]);
 end;
 
-var
-  IoCachePool, FileCachePool: TIocpMemoryPool;
-
 { TIocpSocketConnection }
 
 constructor TIocpSocketConnection.Create(AOwner: TObject);
 begin
   inherited Create(AOwner);
 
-  FRcvBuffer := IoCachePool.GetMemory(False);
+  FRcvBuffer := Owner.FIoCachePool.GetMemory(False);
 end;
 
 destructor TIocpSocketConnection.Destroy;
 begin
-  IoCachePool.FreeMemory(FRcvBuffer);
+  Owner.FIoCachePool.FreeMemory(FRcvBuffer);
 
   inherited Destroy;
 end;
@@ -716,7 +713,7 @@ begin
   // 存块拆分成4K的小块发送
   while (Size > 0) do
   begin
-    BlockSize := Min(IoCachePool.BlockSize, Size);
+    BlockSize := Min(Owner.FIoCachePool.BlockSize, Size);
     if not PostWrite(Buf, BlockSize) then Exit(-2);
     Inc(PAnsiChar(Buf), BlockSize);
     Dec(Size, BlockSize);
@@ -753,8 +750,8 @@ var
   Buf: Pointer;
   BufSize, BlockSize: Integer;
 begin
-  BufSize := FileCachePool.BlockSize;
-  Buf := FileCachePool.GetMemory(False);
+  BufSize := Owner.FFileCachePool.BlockSize;
+  Buf := Owner.FFileCachePool.GetMemory(False);
   try
     Stream.Position := 0;
     while True do
@@ -767,7 +764,7 @@ begin
 
     Result := Stream.Size;
   finally
-    FileCachePool.FreeMemory(Buf);
+    Owner.FFileCachePool.FreeMemory(Buf);
   end;
 end;
 
@@ -777,7 +774,7 @@ end;
 
 procedure TIocpSocketConnection._TriggerClientSentData(Buf: Pointer; Len: Integer);
 begin
-  IoCachePool.FreeMemory(Buf);
+  Owner.FIoCachePool.FreeMemory(Buf);
 end;
 
 {$IFDEF __TIME_OUT_TIMER__}
@@ -883,7 +880,7 @@ begin
 
   PerIoData := Owner.AllocIoData(FSocket, iotRead);
   PerIoData.Buffer.DataBuf.Buf := FRcvBuffer;
-  PerIoData.Buffer.DataBuf.Len := IoCachePool.BlockSize;
+  PerIoData.Buffer.DataBuf.Len := Owner.FIoCachePool.BlockSize;
 
   Flags := 0;
   Bytes := 0;
@@ -918,7 +915,7 @@ begin
 
   IncPendingSend;
 
-  SndBuf := IoCachePool.GetMemory(False);
+  SndBuf := Owner.FIoCachePool.GetMemory(False);
   CopyMemory(SndBuf, Buf, Size);
 
   PerIoData := Owner.AllocIoData(FSocket, iotWrite);
@@ -938,7 +935,7 @@ begin
     Release; // 对应函数开头的 AddRef
     Disconnect; // 对应连接初始化时的 FRefCount := 1
     Owner.FreeIoData(PerIoData);
-    IoCachePool.FreeMemory(SndBuf);
+    Owner.FIoCachePool.FreeMemory(SndBuf);
     Exit(False);
   end;
 
@@ -1090,7 +1087,7 @@ var
   ListenData: TIocpListenData;
   LastErr: Integer;
   RetEvents: TWSANetworkEvents;
-  dwRet: DWORD;
+  RetCode: DWORD;
 begin
   try
     while not Terminated do
@@ -1098,17 +1095,17 @@ begin
       ResetEvent(FSysEvents[EVENT_NEW_LISTEN]);
 
       // 等待退出或者ACCEPT事件
-      dwRet := WSAWaitForMultipleEvents(Length(FAllEvents), @FAllEvents[0], False, INFINITE, True);
+      RetCode := WSAWaitForMultipleEvents(Length(FAllEvents), @FAllEvents[0], False, INFINITE, True);
 
       // 收到退出事件通知
-      if (dwRet = WSA_WAIT_EVENT_0 + EVENT_QUIT) or (dwRet = WSA_WAIT_FAILED) or Terminated then Break;
+      if (RetCode = WSA_WAIT_EVENT_0 + EVENT_QUIT) or (RetCode = WSA_WAIT_FAILED) or Terminated then Break;
 
       // 有新的监听加入
-      if (dwRet = WSA_WAIT_EVENT_0 + EVENT_NEW_LISTEN) then Continue;
+      if (RetCode = WSA_WAIT_EVENT_0 + EVENT_NEW_LISTEN) then Continue;
 
       // 取出监听数据
       TMonitor.Enter(FListenList);
-      ListenData := FListenList[dwRet - WSA_WAIT_EVENT_0 - Length(FSysEvents)];
+      ListenData := FListenList[Integer(RetCode) - WSA_WAIT_EVENT_0 - Length(FSysEvents)];
       TMonitor.Exit(FListenList);
 
       // 读取事件状态
@@ -1256,6 +1253,8 @@ begin
 
   FConnectionPool := TIocpObjectPool.Create(Self, TIocpSocketConnection, MAX_FREE_HANDLE_DATA_BLOCKS);
   FPerIoDataPool := TIocpMemoryPool.Create(SizeOf(TIocpPerIoData), MAX_FREE_IO_DATA_BLOCKS);
+  FIoCachePool := TIocpMemoryPool.Create(NET_CACHE_SIZE, MAX_FREE_IO_DATA_BLOCKS);
+  FFileCachePool := TIocpMemoryPool.Create(FILE_CACHE_SIZE, MAX_FREE_HANDLE_DATA_BLOCKS);
   FConnectionList := TIocpSocketConnectionDictionary.Create(Self);
   FConnectionListLocker := TCriticalSection.Create;
   FIdleConnectionList := TIocpSocketConnectionDictionary.Create(Self);
@@ -1283,8 +1282,9 @@ begin
   FConnectionListLocker.Free;
   FIdleConnectionList.Free;
   FConnectionPool.Free;
-  FPerIoDataPool.Clear;
-  FPerIoDataPool.Release;
+  FPerIoDataPool.Free;
+  FIoCachePool.Free;
+  FFileCachePool.Free;
 
   inherited Destroy;
 end;
@@ -1561,12 +1561,12 @@ end;
 
 function TIocpTcpSocket.GetIoCacheFreeMemory: Integer;
 begin
-  Result := IoCachePool.FreeBlocksSize + FileCachePool.FreeBlocksSize;
+  Result := FIoCachePool.FreeBlocksSize + FFileCachePool.FreeBlocksSize;
 end;
 
 function TIocpTcpSocket.GetIoCacheUsedMemory: Integer;
 begin
-  Result := IoCachePool.UsedBlocksSize + FileCachePool.UsedBlocksSize;
+  Result := FIoCachePool.UsedBlocksSize + FFileCachePool.UsedBlocksSize;
 end;
 
 function TIocpTcpSocket.GetPerIoFreeMemory: Integer;
@@ -2354,15 +2354,7 @@ initialization
   Iocp.Winsock2.InitializeWinSock;
   Iocp.Wship6.InitLibrary;
 
-  IoCachePool := TIocpMemoryPool.Create(NET_CACHE_SIZE, MAX_FREE_IO_DATA_BLOCKS);
-  FileCachePool := TIocpMemoryPool.Create(FILE_CACHE_SIZE, MAX_FREE_HANDLE_DATA_BLOCKS);
-
 finalization
-  IoCachePool.Clear;
-  IoCachePool.Release;
-  FileCachePool.Clear;
-  FileCachePool.Release;
-
   Iocp.Winsock2.UninitializeWinSock;
 
 end.
