@@ -20,7 +20,6 @@ type
   private
     FHttpState: TIocpHttpConnectionState;
     FResponseSize, FResponseSent: Integer;
-//    function ParseRequestDataZeroCopy: Boolean;
   protected
     FRawRequestText: TIocpStringStream;
     FMethod, FPath, FParams, FPathAndParams, FVersion: string;
@@ -252,12 +251,6 @@ begin
     Result := Result + #13#10;
 end;
 
-// todo: 减少内存复制，提升性能
-// 直接从 FRawRequestText.DataString 进行解析
-// 解析起来可能比较费劲，但是对性能提升会有很大帮助
-// ** 实际测试发现，Delphi内置的Copy函数效率远高于我自己实现的
-// ** CopyRawString，所以没必要去做更进一步的优化了，就保持这个
-// ** 函数现在的样子，效率已经很高了
 function TIocpHttpConnection.ParseRequestData: Boolean;
 var
   RequestLine: string;
@@ -283,28 +276,26 @@ begin
     Inc(I);
   // 请求参数及路径
   FRawPathAndParams := Copy(FRequestCmdLine, J, I - J);
-  FRawPath := FRawPathAndParams;
   // 解析参数
-  J := Pos('?', FRawPath);
+  J := Pos('?', FRawPathAndParams);
   if (J <= 0) then
-    FRawParams := ''
-  else begin
-    FRawParams := Copy(FRawPath, J + 1, MaxInt);
-    FRawPath   := Copy(FRawPath, 1, J - 1);
+  begin
+    FRawPath := FRawPathAndParams;
+    FRawParams := '';
+
+    FPath := URLDecode(FRawPath);
+    FParams := '';
+    FPathAndParams := FPath;
+  end else
+  begin
+    FRawPath := Copy(FRawPathAndParams, 1, J - 1);
+    FRawParams := Copy(FRawPathAndParams, J + 1, MaxInt);
+
+    FPath := URLDecode(FRawPath);
+    FParams := URLDecode(FRawParams);
+    FPathAndParams := FPath + '?' + FParams;
   end;
 
-  // 请求参数及路径
-  FPathAndParams := URLDecode(FRawPathAndParams);
-  // 请求路径
-  FPath := FPathAndParams;
-  // 解析参数
-  J := Pos('?', FPath);
-  if (J <= 0) then
-    FParams := ''
-  else begin
-    FParams := Copy(FPath, J + 1, MaxInt);
-    FPath   := Copy(FPath, 1, J - 1);
-  end;
   Inc(I);
   while (I <= Length(FRequestCmdLine)) and (FRequestCmdLine[I] = ' ') do
     Inc(I);
@@ -380,148 +371,6 @@ begin
 
   Result := True;
 end;
-
-// 实际测试发现，效率反而不如上面的ParseRequestData，暂时保留不使用
-{function TIocpHttpConnection.ParseRequestDataZeroCopy: Boolean;
-var
-  I, J, SpacePos: Integer;
-  PRawData, PEnd, PLine, PValue: PAnsiChar;
-  LineSize, ValueSize: Integer;
-
-  function ExtractLine(out Line: PAnsiChar): Integer;
-  begin
-    Result := 0;
-    while (PRawData^ in [#0, #10, #13]) do Inc(PRawData);
-    Line := PRawData;
-    while (PRawData < PEnd) and not (PRawData^ in [#0, #10, #13]) do
-    begin
-      Inc(Result);
-      Inc(PRawData);
-    end;
-  end;
-
-  function CopyRawString(P: PAnsiChar; Size: Integer): string;
-  var
-    i: Integer;
-  begin
-    i := 1;
-    SetLength(Result, Size);
-    while (i <= Size) do
-    begin
-      Result[i] := Char(P^);
-      Inc(P);
-      Inc(i);
-    end;
-  end;
-
-begin
-  PRawData := Pointer(FRawRequestText.DataString);
-  PEnd := PRawData + FRawRequestText.Size;
-  LineSize := ExtractLine(PLine);
-  if (LineSize = 0) then Exit(False);
-
-  I := 0;
-  while (I < LineSize) and (PLine[I] <> ' ') do Inc(I);
-  // 请求方法(GET, POST, PUT, HEAD...)
-  FMethod := UpperCase(CopyRawString(PLine, I));
-  Inc(I);
-  while (I < LineSize) and (PLine[I] = ' ') do
-    Inc(I);
-  J := I;
-  while (I < LineSize) and (PLine[I] <> ' ') do
-    Inc(I);
-  // 请求参数及路径
-  FPathAndParams := URLDecode(CopyRawString(PLine + J, I - J));
-  // 请求路径
-  FPath := FPathAndParams;
-  // 解析参数
-  J := Pos('?', FPath);
-  if (J <= 0) then
-    FParams := ''
-  else begin
-    FParams := Copy(FPath, J + 1, Length(FPath));
-    FPath   := Copy(FPath, 1, J - 1);
-  end;
-  Inc(I);
-  while (I < LineSize) and (PLine[I] = ' ') do
-    Inc(I);
-  J := I;
-  while (I < LineSize) and (PLine[I] <> ' ') do
-    Inc(I);
-  // 请求的HTTP版本
-  FVersion := Trim(UpperCase(CopyRawString(PLine + J, I - J)));
-  if (FVersion = '') then
-    FVersion := 'HTTP/1.0';
-  if (FVersion = 'HTTP/1.0') then
-    FHttpVerNum := 10
-  else
-    FHttpVerNum := 11;
-  FKeepAlive := (FHttpVerNum = 11);
-
-  FRequestHasContentLength := False;
-  FRequestContentLength := 0;
-  while True do
-  begin
-    LineSize := ExtractLine(PLine);
-    if (LineSize = 0) then Break;
-
-    SpacePos := 0;
-    while (SpacePos < LineSize) and (PLine[SpacePos] <> ' ') do Inc(SpacePos);
-    Inc(SpacePos);
-    ValueSize := LineSize - SpacePos;
-    PValue := PLine + SpacePos;
-
-    if StrLIComp(PLine, 'content-type:', 13) = 0 then
-      FRequestContentType := CopyRawString(PValue, ValueSize)
-    else if StrLIComp(PLine, 'content-length:', 15) = 0 then
-    begin
-      FRequestHasContentLength := TRUE;
-      FRequestContentLength := StrToInt64Def(CopyRawString(PValue, ValueSize), -1);
-    end
-    else if StrLIComp(PLine, 'Accept:', 7) = 0 then
-      FRequestAccept:= CopyRawString(PValue, ValueSize)
-    else if StrLIComp(PLine, 'Referer:', 8) = 0 then
-      FRequestReferer := CopyRawString(PValue, ValueSize)
-    else if StrLIComp(PLine, 'Accept-Language:', 16) = 0 then
-      FRequestAcceptLanguage := CopyRawString(PValue, ValueSize)
-    else if StrLIComp(PLine, 'Accept-Encoding:', 16) = 0 then
-      FRequestAcceptEncoding := CopyRawString(PValue, ValueSize)
-    else if StrLIComp(PLine, 'User-Agent:', 11) = 0 then
-      FRequestUserAgent := CopyRawString(PValue, ValueSize)
-    else if StrLIComp(PLine, 'Authorization:', 14) = 0 then
-      FRequestAuth := CopyRawString(PValue, ValueSize)
-    else if StrLIComp(PLine, 'Cookie:', 7) = 0 then
-      FRequestCookies := CopyRawString(PValue, ValueSize)
-    else if StrLIComp(PLine, 'Host:', 5) = 0 then
-    begin
-      FRequestHost := CopyRawString(PValue, ValueSize);
-      J := Pos(':', FRequestHost);
-      if J > 0 then
-      begin
-        FRequestHostName := Copy(FRequestHost, 1, J - 1);
-        FRequestHostPort := Copy(FRequestHost, J + 1, 100);
-      end else
-      begin
-        FRequestHostName := FRequestHost;
-        FRequestHostPort := IntToStr(TIocpHttpServer(Owner).Port);
-      end;
-    end
-    else if StrLIComp(PLine, 'Connection:', 11) = 0 then
-    begin
-      FRequestConnection := CopyRawString(PValue, ValueSize);
-      // HTTP/1.0 默认KeepAlive=False，只有显示指定了Connection: keep-alive才认为KeepAlive=True
-      // HTTP/1.1 默认KeepAlive=True，只有显示指定了Connection: close才认为KeepAlive=False
-      if FHttpVerNum = 10 then
-        FKeepAlive := SameText(FRequestConnection, 'keep-alive')
-      else if SameText(FRequestConnection, 'close') then
-        FKeepAlive := False;
-    end
-    else if StrLIComp(PLine, 'X-Forwarded-For:', 16) = 0 then
-      FXForwardedFor := CopyRawString(PValue, ValueSize);
-  end;
-
-  Result := True;
-end;}
 
 procedure TIocpHttpConnection.Reset;
 begin
@@ -882,11 +731,7 @@ begin
           Client.Disconnect;
           Exit;
         end;
-{        if not Client.ParseRequestDataZeroCopy then
-        begin
-          Client.Disconnect;
-          Exit;
-        end;}
+
         if SameText(Client.Method, 'POST') or
           SameText(Client.Method, 'PUT') then
         begin

@@ -22,27 +22,31 @@ type
     Hidden: Boolean; { File is hidden, not the same as Visible !  }
   end;
 
+{$region '»ù´¡º¯Êý'}
+procedure ByteToHex(B: Byte; P: PChar);
+function HexToByte(P: PChar): Byte;
+function RFC1123_Date(const ADate: TDateTime): string;
+{$endregion}
+
 function URLEncode(const S: string; Encodeing: TEncoding = nil): string;
 function URLDecode(const S: string; Encodeing: TEncoding = nil): string;
 function ExtractURLEncodedValue(const Msg, Name: string; var Value: string;
   Encodeing: TEncoding = nil): Boolean;
 function GetCookieValue(const CookieString, Name: string; var Value: string): Boolean;
-
-function htoi(P: PChar; Len: Integer): Integer;
+function MakeCookie(const Name, Value: string; Expires: TDateTime;
+  const Path: string; const Domain: string = ''): string;
 
 procedure SetHeader(Header: TStrings; const Key, Value: string); overload;
 procedure SetHeader(var Header: string; const Key, Value: string); overload;
 function FixHeader(const Header: string): string;
-function RFC1123_Date(aDate: TDateTime): string;
-function MakeCookie(const Name, Value: string; Expires: TDateTime;
-  const Path: string; const Domain: string = ''): string;
+
+function Posn(const s, t: string; Count: Integer): Integer;
+procedure ParseURL(const url: string; var Proto, User, Pass, Host, Port, Path: string);
+
 function IsDirectory(const Path: string): Boolean;
 function DosPathToUnixPath(const Path: string): string;
 function UnixPathToDosPath(const Path: string): string;
 function BuildDirList(const RealPath, RequestPath: string): RawByteString;
-
-function Posn(const s, t: string; Count: Integer): Integer;
-procedure ParseURL(const url: string; var Proto, User, Pass, Host, Port, Path: string);
 
 implementation
 
@@ -55,9 +59,25 @@ const
     ('0', '1', '2', '3', '4', '5', '6', '7',
      '8', '9', 'A', 'B', 'C', 'D', 'E', 'F');
 begin
-  P^ := HexChar[(B shr 4)];
-  Inc(P);
-  P^ := HexChar[(B and $FF)];
+  P[0] := HexChar[(B shr 4)];
+  P[1] := HexChar[(B and $0F)];
+end;
+
+function HexToByte(P: PChar): Byte;
+var
+  I, B, N: Byte;
+begin
+  Result := 0;
+  for I := 0 to 1 do
+  begin
+    B := Byte(P[I]);
+    case B of
+      Byte('0')..Byte('9'): N := B - Byte('0');
+    else
+      N := (B and $0F) + 9;
+    end;
+    Result := Result shl 4 + N;
+  end;
 end;
 
 function URLEncode(const S: string; Encodeing: TEncoding = nil): string;
@@ -68,13 +88,15 @@ var
   LEncodeing: TEncoding;
   LBytes: TBytes;
 begin
+  if (S = '') then Exit('');
+
   if Assigned(Encodeing) then
     LEncodeing := Encodeing
   else
     LEncodeing := TEncoding.UTF8;
 
   LBytes := LEncodeing.GetBytes(S);
-  SetLength(RStr, Length(S) * 3);
+  SetLength(RStr, Length(LBytes) * 3);
   J := 0;
   for I := Low(LBytes) to High(LBytes) do
   begin
@@ -98,26 +120,6 @@ begin
   Result := RStr;
 end;
 
-function htoi(P: PChar; Len: Integer): Integer;
-var
-  C: Char;
-  N: Byte;
-begin
-  Result := 0;
-  while (Len > 0) do
-  begin
-    C := P^;
-    case C of
-      '0'..'9': N := Byte(C) - Byte('0');
-    else
-      N := (Byte(C) and $0F) + 9;
-    end;
-    Result := Result * 16 + N;
-    Dec(Len);
-    Inc(P);
-  end;
-end;
-
 function URLDecode(const S: string; Encodeing: TEncoding = nil): string;
 var
   I, J, L: Integer;
@@ -125,6 +127,9 @@ var
   LBytes: TBytes;
   B: Byte;
 begin
+  if (S = '') then Exit('');
+
+
   if Assigned(Encodeing) then
     LEncodeing := Encodeing
   else
@@ -139,7 +144,7 @@ begin
     B := Byte(S[I]);
     if (B = Byte('%')) then
     begin
-      B := Byte(htoi(PChar(@S[I + 1]), 2));
+      B := HexToByte(@S[I + 1]);
       Inc(I, 2);
     end
     else if (B = Byte('+')) then
@@ -194,7 +199,7 @@ begin
         if (B = Byte('%')) then
         begin
           if (p[1] <> #0) then
-            B := htoi(p + 1, 2);
+            B := HexToByte(p + 1);
           Inc(p, 2);
         end
         else if (B = Byte('+')) then
@@ -243,7 +248,7 @@ begin
         Ch := p^;
         if (Ch = '%') then
         begin
-          Ch := Char(htoi(p + 1, 2));
+          Ch := Char(HexToByte(p + 1));
           Inc(p, 2);
         end
         else if (Ch = '+') then
@@ -258,6 +263,80 @@ begin
       Inc(p);
     if (p^ = ';') then
       Inc(p);
+  end;
+end;
+
+function RFC1123_Date(const ADate: TDateTime): string;
+const
+  StrWeekDay: array [1..7] of string =
+    ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun');
+  StrMonth: array [1..12] of string =
+    ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
+var
+  Year, Month, Day: Word;
+  Hour, Min, Sec, MSec: Word;
+  DayOfWeek: Word;
+begin
+  DecodeDate(ADate, Year, Month, Day);
+  DecodeTime(ADate, Hour, Min, Sec, MSec);
+  DayOfWeek := ((Trunc(ADate) - 2) mod 7) + 1;
+  Result := Format('%s, %.2d %s %.4d %.2d:%.2d:%.2d',
+    [StrWeekDay[DayOfWeek], Day, StrMonth[Month], Year, Hour, Min, Sec]);
+end;
+
+function MakeCookie(const Name, Value: string; Expires: TDateTime;
+  const Path: string; const Domain: string): string;
+begin
+  Result := 'Set-Cookie: ' + Name + '=' + URLEncode(Value);
+  if (Value = '') then
+    Result := Result + '_NONE_';
+  if (Expires <> 0) then
+    Result := Result + '; EXPIRES=' + RFC1123_Date(Expires);
+  if (Domain <> '') then
+    Result := Result + '; DOMAIN=' + Domain;
+  Result := Result + '; PATH=' + Path + #13#10;
+end;
+
+procedure SetHeader(Header: TStrings; const Key, Value: string); overload;
+var
+  i: Integer;
+begin
+  for i := 0 to Header.Count - 1 do
+  begin
+    if (Pos(LowerCase(Key) + ':', LowerCase(string(Header[i]))) = 1) then
+    begin
+      Header[i] := string(Key + ': ' + Value);
+      Exit;
+    end;
+  end;
+
+  Header.Add(string(Key + ': ' + Value));
+end;
+
+procedure SetHeader(var Header: string; const Key, Value: string); overload;
+var
+  HeaderList: TStringList;
+begin
+  HeaderList := TStringList.Create;
+  try
+    HeaderList.Text := string(Header);
+    SetHeader(HeaderList, Key, Value);
+    Header := string(HeaderList.Text);
+  finally
+    HeaderList.Free;
+  end;
+end;
+
+function FixHeader(const Header: string): string;
+begin
+  Result := Header;
+  if (RightStr(Header, 4) <> #13#10#13#10) then
+  begin
+    if (RightStr(Header, 2) = #13#10) then
+      Result := Result + #13#10
+    else
+      Result := Result + #13#10#13#10;
   end;
 end;
 
@@ -488,79 +567,6 @@ begin
     if (Path = '') then
       Path := '/';
   end;
-end;
-
-procedure SetHeader(Header: TStrings; const Key, Value: string); overload;
-var
-  i: Integer;
-begin
-  for i := 0 to Header.Count - 1 do
-  begin
-    if (Pos(LowerCase(Key) + ':', LowerCase(string(Header[i]))) = 1) then
-    begin
-      Header[i] := string(Key + ': ' + Value);
-      Exit;
-    end;
-  end;
-
-  Header.Add(string(Key + ': ' + Value));
-end;
-
-procedure SetHeader(var Header: string; const Key, Value: string); overload;
-var
-  HeaderList: TStringList;
-begin
-  HeaderList := TStringList.Create;
-  try
-    HeaderList.Text := string(Header);
-    SetHeader(HeaderList, Key, Value);
-    Header := string(HeaderList.Text);
-  finally
-    HeaderList.Free;
-  end;
-end;
-
-function FixHeader(const Header: string): string;
-begin
-  Result := Header;
-  if (RightStr(Header, 4) <> #13#10#13#10) then
-  begin
-    if (RightStr(Header, 2) = #13#10) then
-      Result := Result + #13#10
-    else
-      Result := Result + #13#10#13#10;
-  end;
-end;
-
-function RFC1123_Date(aDate: TDateTime): string;
-const
-  StrWeekDay: string = 'MonTueWedThuFriSatSun';
-  StrMonth: string = 'JanFebMarAprMayJunJulAugSepOctNovDec';
-var
-  Year, Month, Day: Word;
-  Hour, Min, Sec, MSec: Word;
-  DayOfWeek: Word;
-begin
-  DecodeDate(aDate, Year, Month, Day);
-  DecodeTime(aDate, Hour, Min, Sec, MSec);
-  DayOfWeek := ((Trunc(aDate) - 2) mod 7);
-  Result := Copy(StrWeekDay, 1 + DayOfWeek * 3, 3) + ', ' +
-    Format('%2.2d %s %4.4d %2.2d:%2.2d:%2.2d',
-    [Day, Copy(StrMonth, 1 + 3 * (Month - 1), 3),
-    Year, Hour, Min, Sec]);
-end;
-
-function MakeCookie(const Name, Value: string; Expires: TDateTime;
-  const Path: string; const Domain: string): string;
-begin
-  Result := 'Set-Cookie: ' + Name + '=' + URLEncode(Value);
-  if Length(Value) = 0 then
-    Result := Result + '_NONE_; EXPIRES=' + RFC1123_Date(Date - 7)
-  else if Expires <> 0 then
-    Result := Result + '; EXPIRES=' + RFC1123_Date(Expires);
-  if Domain <> '' then
-    Result := Result + '; DOMAIN=' + Domain;
-  Result := Result + '; PATH=' + Path + #13#10;
 end;
 
 function IsDirectory(const Path: string): Boolean;
