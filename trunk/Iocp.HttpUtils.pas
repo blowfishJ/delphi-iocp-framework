@@ -22,22 +22,20 @@ type
     Hidden: Boolean; { File is hidden, not the same as Visible !  }
   end;
 
-  TCharsetDetectResult = (cdrAscii, cdrUtf8, cdrUnknown);
+function URLEncode(const S: string; Encodeing: TEncoding = nil): string;
+function URLDecode(const S: string; Encodeing: TEncoding = nil): string;
+function ExtractURLEncodedValue(const Msg, Name: string; var Value: string;
+  Encodeing: TEncoding = nil): Boolean;
+function GetCookieValue(const CookieString, Name: string; var Value: string): Boolean;
 
-function URLEncode(const s: RawByteString): string; overload;
-function URLEncode(const s: string): string; overload;
-function URLDecode(const s: string; DetectUtf8: Boolean = True): string;
+function htoi(P: PChar; Len: Integer): Integer;
+
 procedure SetHeader(Header: TStrings; const Key, Value: string); overload;
 procedure SetHeader(var Header: string; const Key, Value: string); overload;
 function FixHeader(const Header: string): string;
-function ExtractURLEncodedValue(Msg: PChar; Name: string; var Value: string;
-  DetectUtf8: Boolean = True): Boolean; overload;
-function ExtractURLEncodedValue(const Msg: string; Name: string; var Value: string;
-  DetectUtf8: Boolean = True): Boolean; overload;
 function RFC1123_Date(aDate: TDateTime): string;
 function MakeCookie(const Name, Value: string; Expires: TDateTime;
   const Path: string; const Domain: string = ''): string;
-function GetCookieValue(const CookieString: string; const Name: string; var Value: string): Boolean;
 function IsDirectory(const Path: string): Boolean;
 function DosPathToUnixPath(const Path: string): string;
 function UnixPathToDosPath(const Path: string): string;
@@ -45,26 +43,223 @@ function BuildDirList(const RealPath, RequestPath: string): RawByteString;
 
 function Posn(const s, t: string; Count: Integer): Integer;
 procedure ParseURL(const url: string; var Proto, User, Pass, Host, Port, Path: string);
-function CharsetDetect(const Buf: Pointer; Len: Integer): TCharsetDetectResult; overload;
-function CharsetDetect(const Str: RawByteString): TCharsetDetectResult; overload;
-function IsUtf8Valid(const Buf: Pointer; Len: Integer): Boolean; overload;
-function IsUtf8Valid(const Str: RawByteString): Boolean; overload;
-function htoin(Value: PWideChar; Len: Integer): Integer; overload;
-function htoin(Value: PAnsiChar; Len: Integer): Integer; overload;
-function htoi2(Value: PWideChar): Integer; overload;
-function htoi2(Value: PAnsiChar): Integer; overload;
-function IsXDigit(Ch: WideChar): Boolean; overload;
-function IsXDigit(Ch: AnsiChar): Boolean; overload;
-function XDigit(Ch: WideChar): Integer; overload;
-function XDigit(Ch: AnsiChar): Integer; overload;
 
 implementation
 
-type
-  TCharSet = set of AnsiChar;
-
 const
-  UriProtocolSchemeAllowedChars: TCharSet = ['a'..'z', '0'..'9', '+', '-', '.'];
+  UriProtocolSchemeAllowedChars = ['a'..'z', '0'..'9', '+', '-', '.'];
+
+procedure ByteToHex(B: Byte; P: PChar);
+const
+  HexChar: array [0..15] of Char =
+    ('0', '1', '2', '3', '4', '5', '6', '7',
+     '8', '9', 'A', 'B', 'C', 'D', 'E', 'F');
+begin
+  P^ := HexChar[(B shr 4)];
+  Inc(P);
+  P^ := HexChar[(B and $FF)];
+end;
+
+function URLEncode(const S: string; Encodeing: TEncoding = nil): string;
+var
+  I, J: Integer;
+  B: Byte;
+  RStr: string;
+  LEncodeing: TEncoding;
+  LBytes: TBytes;
+begin
+  if Assigned(Encodeing) then
+    LEncodeing := Encodeing
+  else
+    LEncodeing := TEncoding.UTF8;
+
+  LBytes := LEncodeing.GetBytes(S);
+  SetLength(RStr, Length(S) * 3);
+  J := 0;
+  for I := Low(LBytes) to High(LBytes) do
+  begin
+    B := LBytes[I];
+    case B of
+      Byte('0')..Byte('9'), Byte('A')..Byte('Z'), Byte('a')..Byte('z'):
+        begin
+          Inc(J);
+          RStr[J] := Char(B);
+        end;
+      Byte(' '): RStr[J] := '+';
+    else
+      Inc(J);
+      RStr[J] := '%';
+      ByteToHex(B, @RStr[J + 1]);
+      Inc(J, 2);
+    end;
+  end;
+  SetLength(RStr, J);
+
+  Result := RStr;
+end;
+
+function htoi(P: PChar; Len: Integer): Integer;
+var
+  C: Char;
+  N: Byte;
+begin
+  Result := 0;
+  while (Len > 0) do
+  begin
+    C := P^;
+    case C of
+      '0'..'9': N := Byte(C) - Byte('0');
+    else
+      N := (Byte(C) and $0F) + 9;
+    end;
+    Result := Result * 16 + N;
+    Dec(Len);
+    Inc(P);
+  end;
+end;
+
+function URLDecode(const S: string; Encodeing: TEncoding = nil): string;
+var
+  I, J, L: Integer;
+  LEncodeing: TEncoding;
+  LBytes: TBytes;
+  B: Byte;
+begin
+  if Assigned(Encodeing) then
+    LEncodeing := Encodeing
+  else
+    LEncodeing := TEncoding.UTF8;
+
+  L := Length(S);
+  SetLength(LBytes, L);
+  I := 1;
+  J := 0;
+  while (I <= L) do
+  begin
+    B := Byte(S[I]);
+    if (B = Byte('%')) then
+    begin
+      B := Byte(htoi(PChar(@S[I + 1]), 2));
+      Inc(I, 2);
+    end
+    else if (B = Byte('+')) then
+      B := Byte(' ');
+    Inc(I);
+    LBytes[J] := B;
+    Inc(J);
+  end;
+
+  Result := LEncodeing.GetString(LBytes, 0, J);
+end;
+
+function ExtractURLEncodedValue(const Msg, Name: string; var Value: string;
+  Encodeing: TEncoding = nil): Boolean;
+var
+  J: Integer;
+  LEncodeing: TEncoding;
+  LBytes: TBytes;
+  B: Byte;
+  NameLen: Integer;
+  FoundLen: Integer;
+  p, q: PChar;
+begin
+  Result := False;
+  Value := '';
+  if (Msg = '') then Exit;
+
+  if Assigned(Encodeing) then
+    LEncodeing := Encodeing
+  else
+    LEncodeing := TEncoding.UTF8;
+
+  SetLength(LBytes, Length(Msg));
+  J := 0;
+
+  NameLen := Length(Name);
+  p := PChar(Msg);
+  while p^ <> #0 do
+  begin
+    q := p;
+    while (p^ <> #0) and (p^ <> '=') do
+      Inc(p);
+    FoundLen := p - q;
+    if (p^ = '=') then
+      Inc(p);
+    if (StrLIComp(q, @Name[1], NameLen) = 0) and
+      (NameLen = FoundLen) then
+    begin
+      while (p^ <> #0) and (p^ <> '&') do
+      begin
+        B := Byte(p^);
+        if (B = Byte('%')) then
+        begin
+          if (p[1] <> #0) then
+            B := htoi(p + 1, 2);
+          Inc(p, 2);
+        end
+        else if (B = Byte('+')) then
+          B := Byte(' ');
+        LBytes[J] := B;
+        Inc(J);
+        Inc(p);
+      end;
+      Result := True;
+      Break;
+    end;
+    while (p^ <> #0) and (p^ <> '&') do
+      Inc(p);
+    if (p^ = '&') then
+      Inc(p);
+  end;
+
+  Value := LEncodeing.GetString(LBytes, 0, J);
+end;
+
+function GetCookieValue(const CookieString, Name: string; var Value: string): Boolean;
+var
+  NameLen: Integer;
+  Ch: Char;
+  p, q: PChar;
+begin
+  Value := '';
+  Result := False;
+  if (CookieString = '') or (Name = '') then Exit;
+
+  NameLen := Length(Name);
+  p := PChar(CookieString);
+  while (p^ <> #0) do
+  begin
+    while (p^ <> #0) and (p^ = ' ') do
+      Inc(p);
+    q := p;
+    while (p^ <> #0) and (p^ <> '=') do
+      Inc(p);
+    if (p^ = '=') then
+      Inc(p);
+    if (StrLIComp(q, @Name[1], NameLen) = 0) then
+    begin
+      while (p^ <> #0) and (p^ <> ';') do
+      begin
+        Ch := p^;
+        if (Ch = '%') then
+        begin
+          Ch := Char(htoi(p + 1, 2));
+          Inc(p, 2);
+        end
+        else if (Ch = '+') then
+          Ch := ' ';
+        Value := Value + Ch;
+        Inc(p);
+      end;
+      Result := True;
+      Break;
+    end;
+    while (p^ <> #0) and (p^ <> ';') do
+      Inc(p);
+    if (p^ = ';') then
+      Inc(p);
+  end;
+end;
 
 {* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
 { Find the count'th occurence of the s string in the t string.              }
@@ -295,181 +490,6 @@ begin
   end;
 end;
 
-function CharsetDetect(const Buf: Pointer; Len: Integer): TCharsetDetectResult;
-var
-  PEndBuf: PByte;
-  PBuf: PByte;
-  Byte2Mask: Byte;
-  Ch: Byte;
-  Trailing: Integer; // trailing (continuation) bytes to follow
-begin
-  PBuf := Buf;
-  PEndBuf := Pointer(INT_PTR(Buf) + Len);
-  Byte2Mask := $00;
-  Trailing := 0;
-  Result := cdrAscii;
-  while (PBuf <> PEndBuf) do
-  begin
-    Ch := PBuf^;
-    Inc(PBuf);
-    if Trailing <> 0 then
-    begin
-      if Ch and $C0 = $80 then // Does trailing byte follow UTF-8 format?
-      begin
-        if (Byte2Mask <> 0) then // Need to check 2nd byte for proper range?
-          if Ch and Byte2Mask <> 0 then // Are appropriate bits set?
-            Byte2Mask := 0
-          else
-          begin
-            Result := cdrUnknown;
-            Exit;
-          end;
-        Dec(Trailing);
-        Result := cdrUtf8;
-      end
-      else
-      begin
-        Result := cdrUnknown;
-        Exit;
-      end;
-    end
-    else
-    begin
-      if Ch and $80 = 0 then
-        Continue // valid 1 byte UTF-8
-      else if Ch and $E0 = $C0 then // valid 2 byte UTF-8
-      begin
-        if Ch and $1E <> 0 then // Is UTF-8 byte in proper range?
-          Trailing := 1
-        else
-        begin
-          Result := cdrUnknown;
-          Exit;
-        end;
-      end
-      else if Ch and $F0 = $E0 then // valid 3 byte UTF-8
-      begin
-        if Ch and $0F = 0 then // Is UTF-8 byte in proper range?
-          Byte2Mask := $20; // If not set mask to check next byte
-        Trailing := 2;
-      end
-      else if Ch and $F8 = $F0 then // valid 4 byte UTF-8
-      begin
-        if Ch and $07 = 0 then // Is UTF-8 byte in proper range?
-          Byte2Mask := $30; // If not set mask to check next byte
-        Trailing := 3;
-      end
-          { 4 byte is the maximum today, see ISO 10646, so let's break here }
-          { else if Ch and $FC = $F8 then     // valid 5 byte UTF-8
-            begin
-                if Ch and $03 = 0 then        // Is UTF-8 byte in  proper range?
-                    Byte2Mask := $38;         // If not set mask to check next byte
-                Trailing := 4;
-            end
-            else if Ch and $FE = $FC then     // valid 6 byte UTF-8
-            begin
-                if ch and $01 = 0 then        // Is UTF-8 byte in proper range?
-                    Byte2Mask := $3C;         // If not set mask to check next byte
-                Trailing := 5;
-            end}
-      else
-      begin
-        Result := cdrUnknown;
-        Exit;
-      end;
-    end;
-  end; // while
-
-  case Result of
-    cdrUtf8, cdrAscii: if Trailing <> 0 then Result := cdrUnknown;
-  end;
-end;
-
-function CharsetDetect(const Str: RawByteString): TCharsetDetectResult;
-begin
-  Result := CharsetDetect(Pointer(Str), Length(Str));
-end;
-
-function IsUtf8Valid(const Buf: Pointer; Len: Integer): Boolean;
-begin
-  Result := CharsetDetect(Buf, Len) <> cdrUnknown;
-end;
-
-function IsUtf8Valid(const Str: RawByteString): Boolean;
-begin
-  Result := IsUtf8Valid(Pointer(Str), Length(Str));
-end;
-
-function URLEncode(const s: RawByteString): string; overload;
-var
-  i, J: Integer;
-  AStr: UTF8String;
-  RStr: AnsiString;
-  HexStr: string;
-begin
-  AStr := s;
-  SetLength(RStr, Length(AStr) * 3);
-  J := 0;
-  for i := 1 to Length(AStr) do
-  begin
-    case AStr[i] of
-      '0'..'9', 'A'..'Z', 'a'..'z':
-        begin
-          Inc(J);
-          RStr[J] := AStr[i];
-        end
-    else
-      Inc(J);
-      RStr[J] := '%';
-      HexStr := IntToHex(Ord(AStr[i]), 2);
-      Inc(J);
-      RStr[J] := AnsiChar(HexStr[1]);
-      Inc(J);
-      RStr[J] := AnsiChar(HexStr[2]);
-    end;
-  end;
-  SetLength(RStr, J);
-
-  Result := string(RStr);
-end;
-
-function URLEncode(const s: string): string;
-begin
-  Result := URLEncode(UTF8Encode(s));
-end;
-
-function URLDecode(const s: string; DetectUtf8: Boolean): string;
-var
-  i, J, L: Integer;
-  U8Str: AnsiString;
-  Ch: AnsiChar;
-begin
-  L := Length(s);
-  SetLength(U8Str, L);
-  i := 1;
-  J := 0;
-  while (i <= L) do
-  begin
-    Ch := AnsiChar(s[i]);
-    if Ch = '%' then
-    begin
-      Ch := AnsiChar(htoi2(PChar(@s[i + 1])));
-      Inc(i, 2);
-    end
-    else if Ch = '+' then
-      Ch := ' ';
-    Inc(J);
-    U8Str[J] := Ch;
-    Inc(i);
-  end;
-  SetLength(U8Str, J);
-
-  if DetectUtf8 and IsUtf8Valid(U8Str) then
-    Result := UTF8ToString(U8Str)
-  else
-    Result := string(U8Str);
-end;
-
 procedure SetHeader(Header: TStrings; const Key, Value: string); overload;
 var
   i: Integer;
@@ -512,165 +532,6 @@ begin
   end;
 end;
 
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-
-function XDigit(Ch: WideChar): Integer;
-begin
-  case Ch of
-    '0'..'9': Result := Ord(Ch) - Ord('0');
-  else
-    Result := (Ord(Ch) and 15) + 9;
-  end;
-end;
-
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-
-function XDigit(Ch: AnsiChar): Integer;
-begin
-  case Ch of
-    '0'..'9': Result := Ord(Ch) - Ord('0');
-  else
-    Result := (Ord(Ch) and 15) + 9;
-  end;
-end;
-
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-
-function IsXDigit(Ch: WideChar): Boolean;
-begin
-  Result := ((Ch >= '0') and (Ch <= '9')) or
-    ((Ch >= 'a') and (Ch <= 'f')) or
-    ((Ch >= 'A') and (Ch <= 'F'));
-end;
-
-function IsXDigit(Ch: AnsiChar): Boolean;
-begin
-  Result := ((Ch >= '0') and (Ch <= '9')) or
-    ((Ch >= 'a') and (Ch <= 'f')) or
-    ((Ch >= 'A') and (Ch <= 'F'));
-end;
-
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-
-function htoin(Value: PWideChar; Len: Integer): Integer;
-var
-  i: Integer;
-begin
-  Result := 0;
-  i := 0;
-  while (i < Len) and (Value[i] = ' ') do
-    i := i + 1;
-  while (i < Len) and (IsXDigit(Value[i])) do
-  begin
-    Result := Result * 16 + XDigit(Value[i]);
-    i := i + 1;
-  end;
-end;
-
-function htoin(Value: PAnsiChar; Len: Integer): Integer;
-var
-  i: Integer;
-begin
-  Result := 0;
-  i := 0;
-  while (i < Len) and (Value[i] = ' ') do
-    i := i + 1;
-  while (i < Len) and (IsXDigit(Value[i])) do
-  begin
-    Result := Result * 16 + XDigit(Value[i]);
-    i := i + 1;
-  end;
-end;
-
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-
-function htoi2(Value: PWideChar): Integer;
-begin
-  Result := htoin(Value, 2);
-end;
-
-function htoi2(Value: PAnsiChar): Integer;
-begin
-  Result := htoin(Value, 2);
-end;
-
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-{ Retrieve a single value by name out of an URL encoded data stream         }
-{ In the stream, every space is replaced by a '+'. The '%' character is     }
-{ an escape character. The next two are 2 digits hexadecimal codes ascii    }
-{ code value. The stream is constitued by name=value couples separated      }
-{ by a single '&' character. The special characters are coded by the '%'    }
-{ followed by hex-ascii character code.                                     }
-function ExtractURLEncodedValue(
-  Msg: PChar; { URL Encoded stream                     }
-  Name: string; { Variable name to look for              }
-  var Value: string; { Where to put variable value            }
-  DetectUtf8: Boolean): Boolean; { Found or not found that's the question }
-var
-  NameLen: Integer;
-  FoundLen: Integer; {tps}
-  Ch: AnsiChar;
-  p, q: PChar;
-  U8Str: AnsiString;
-begin
-  Result := False;
-  Value := '';
-  if Msg = nil then { Empty source }
-    Exit;
-
-  NameLen := Length(Name);
-  U8Str := '';
-  p := Msg;
-  while p^ <> #0 do
-  begin
-    q := p;
-    while (p^ <> #0) and (p^ <> '=') do
-      Inc(p);
-    FoundLen := p - q; {tps}
-    if p^ = '=' then
-      Inc(p);
-    if (StrLIComp(q, @Name[1], NameLen) = 0) and
-      (NameLen = FoundLen) then
-    begin {tps}
-      while (p^ <> #0) and (p^ <> '&') do
-      begin
-        Ch := AnsiChar(Ord(p^)); // should contain nothing but < ord 128
-        if Ch = '%' then
-        begin
-          if p[1] <> #0 then // V1.35 Added test
-            Ch := AnsiChar(htoi2(p + 1));
-          Inc(p, 2);
-        end
-        else if Ch = '+' then
-          Ch := ' ';
-        U8Str := U8Str + Ch;
-        Inc(p);
-      end;
-      Result := True;
-      Break;
-    end;
-    while (p^ <> #0) and (p^ <> '&') do
-      Inc(p);
-    if p^ = '&' then
-      Inc(p);
-  end;
-
-  if DetectUtf8 and IsUtf8Valid(U8Str) then
-    Value := UTF8ToString(U8Str)
-  else
-    Value := string(U8Str);
-end;
-
-function ExtractURLEncodedValue(
-  const Msg: string; { URL Encoded stream                     }
-  Name: string; { Variable name to look for              }
-  var Value: string; { Where to put variable value            }
-  DetectUtf8: Boolean): Boolean; overload;
-begin
-  Result := ExtractURLEncodedValue(PChar(Msg), Name, Value, DetectUtf8);
-end;
-
 function RFC1123_Date(aDate: TDateTime): string;
 const
   StrWeekDay: string = 'MonTueWedThuFriSatSun';
@@ -700,58 +561,6 @@ begin
   if Domain <> '' then
     Result := Result + '; DOMAIN=' + Domain;
   Result := Result + '; PATH=' + Path + #13#10;
-end;
-
-function GetCookieValue(
-  const CookieString: string; { Cookie string from header line         }
-  const Name: string; { Cookie name to look for                }
-  var Value: string) { Where to put variable value            }
-  : Boolean; { Found or not found that's the question }
-var
-  NameLen: Integer;
-  Ch: Char;
-  p, q: PChar;
-begin
-  Value := '';
-  Result := False;
-
-  if (CookieString = '') or (Name = '') then
-    Exit;
-
-  NameLen := Length(Name);
-  p := @CookieString[1];
-  while p^ <> #0 do
-  begin
-    while (p^ <> #0) and (p^ = ' ') do
-      Inc(p);
-    q := p;
-    while (p^ <> #0) and (p^ <> '=') do
-      Inc(p);
-    if p^ = '=' then
-      Inc(p);
-    if StrLIComp(q, @Name[1], NameLen) = 0 then
-    begin
-      while (p^ <> #0) and (p^ <> ';') do
-      begin
-        Ch := p^;
-        if Ch = '%' then
-        begin
-          Ch := Char(htoi2(p + 1));
-          Inc(p, 2);
-        end
-        else if Ch = '+' then
-          Ch := ' ';
-        Value := Value + Ch;
-        Inc(p);
-      end;
-      Result := True;
-      Break;
-    end;
-    while (p^ <> #0) and (p^ <> ';') do
-      Inc(p);
-    if p^ = ';' then
-      Inc(p);
-  end;
 end;
 
 function IsDirectory(const Path: string): Boolean;
