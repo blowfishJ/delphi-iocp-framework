@@ -39,8 +39,8 @@ type
     constructor Create(AOwner: TObject; AObjectClass: TIocpObjectClass; AMaxFreeObjects: Integer); virtual;
     destructor Destroy; override;
 
-    procedure Lock;
-    procedure Unlock;
+    procedure Lock; inline;
+    procedure Unlock; inline;
     function GetObject: TIocpObject;
     procedure FreeObject(AObj: TIocpObject);
     procedure Clear;
