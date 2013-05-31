@@ -355,6 +355,8 @@ type
     destructor Destroy; override;
 
     // Host设置为''时，如果系统支持IPv6则会同时监听IPv4及IPv6
+    // ::1 = 127.0.0.1
+    // :: = 0.0.0.0
     function Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Boolean; overload;
     function Listen(Port: Word; InitAcceptNum: Integer): Boolean; overload;
     procedure StopListen(ListenSocket: TSocket);
