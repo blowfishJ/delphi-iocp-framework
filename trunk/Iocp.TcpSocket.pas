@@ -249,6 +249,7 @@ type
     TIocpEvents = TArray<THandle>;
   private
     FOwner: TIocpTcpSocket;
+    FLocker: TCriticalSection;
     FListenList: TIocpListenList;
     FSysEvents, FAllEvents: TIocpEvents;
 
@@ -1067,6 +1068,7 @@ begin
   FreeOnTerminate := True;
 
   FOwner := IocpSocket;
+  FLocker := TCriticalSection.Create;
   FListenList := TIocpListenList.Create;
   SetLength(FSysEvents, 2);
   FSysEvents[0] := CreateEvent(nil, True, False, nil); // New listen
@@ -1080,6 +1082,7 @@ end;
 destructor TIocpAcceptThread.Destroy;
 begin
   FreeAndNil(FListenList);
+  FLocker.Free;
   inherited Destroy;
 end;
 
@@ -1106,9 +1109,9 @@ begin
       if (RetCode = WSA_WAIT_EVENT_0 + EVENT_NEW_LISTEN) then Continue;
 
       // 取出监听数据
-      TMonitor.Enter(FListenList);
+      FLocker.Enter;
       ListenData := FListenList[Integer(RetCode) - WSA_WAIT_EVENT_0 - Length(FSysEvents)];
-      TMonitor.Exit(FListenList);
+      FLocker.Leave;
 
       // 读取事件状态
       if (WSAEnumNetworkEvents(ListenData.Socket, ListenData.AcceptEvent, @RetEvents) = SOCKET_ERROR) then
@@ -1159,12 +1162,12 @@ procedure TIocpAcceptThread.Reset;
     SetLength(Result, Length(FSysEvents) + FListenList.Count);
     for i := Low(FSysEvents) to High(FSysEvents) do
       Result[i] := FSysEvents[i];
-    TMonitor.Enter(FListenList);
+    FLocker.Enter;
     try
       for i := 0 to FListenList.Count - 1 do
         Result[i + Length(FSysEvents)] := FListenList[i].AcceptEvent;
     finally
-      TMonitor.Exit(FListenList);
+      FLocker.Leave;
     end;
   end;
 begin
@@ -1178,7 +1181,7 @@ var
   ListenData: TIocpListenData;
   i: Integer;
 begin
-  TMonitor.Enter(FListenList);
+  FLocker.Enter;
   try
     if (FListenList.Count >= MAX_LISTEN_SOCKETS) then Exit(False);
 
@@ -1192,7 +1195,7 @@ begin
     WSAEventSelect(ListenSocket, ListenData.AcceptEvent, FD_ACCEPT);
     FListenList.Add(ListenData);
   finally
-    TMonitor.Exit(FListenList);
+    FLocker.Leave;
   end;
 
   Reset;
@@ -1205,7 +1208,7 @@ var
 begin
   Result := False;
 
-  TMonitor.Enter(FListenList);
+  FLocker.Enter;
   try
     for ListenData in FListenList do
     begin
@@ -1218,7 +1221,7 @@ begin
       end;
     end;
   finally
-    TMonitor.Exit(FListenList);
+    FLocker.Leave;
   end;
 
   Reset;
@@ -1229,7 +1232,7 @@ var
   ListenData: TIocpListenData;
   Event: THandle;
 begin
-  TMonitor.Enter(FListenList);
+  FLocker.Enter;
   try
     for ListenData in FListenList do
     begin
@@ -1238,7 +1241,7 @@ begin
     end;
     FListenList.Clear;
   finally
-    TMonitor.Exit(FListenList);
+    FLocker.Leave;
   end;
 
   for Event in FSysEvents do
@@ -1381,10 +1384,16 @@ begin
     // X.Values.ToArray将连接列表复制一份是因为连接断开后会
     // 自动从对应的工作/空闲列表中删除，这会造成迭代返回异常数据
     for Client in FConnectionList.Values.ToArray do
+    begin
+      Client._CloseSocket;
       Client.Disconnect;
+    end;
 
     for Client in FIdleConnectionList.Values.ToArray do
+    begin
+      Client._CloseSocket;
       Client.Disconnect;
+    end;
   finally
     FConnectionListLocker.Leave;
   end;
