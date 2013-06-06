@@ -6,20 +6,14 @@ uses
   Windows, Classes, SysUtils, StrUtils, DateUtils;
 
 type
-  THttpDirEntry = class
-    Visible: Boolean; { TRUE if the entry is to be shown in list  }
+  THttpFileEntry = class
     Name: string;
     Size: Int64;
-    Year: Word;
-    Month: Word;
-    Day: Word;
-    Hour: Word;
-    Min: Word;
-    Sec: Word;
+    Time: TDateTime;
     Directory: Boolean;
     ReadOnly: Boolean;
     SysFile: Boolean;
-    Hidden: Boolean; { File is hidden, not the same as Visible !  }
+    Hidden: Boolean;
   end;
 
 {$region '»ù´¡º¯Êý'}
@@ -39,9 +33,6 @@ function MakeCookie(const Name, Value: string; Expires: TDateTime;
 procedure SetHeader(Header: TStrings; const Key, Value: string); overload;
 procedure SetHeader(var Header: string; const Key, Value: string); overload;
 function FixHeader(const Header: string): string;
-
-function Posn(const s, t: string; Count: Integer): Integer;
-procedure ParseURL(const url: string; var Proto, User, Pass, Host, Port, Path: string);
 
 function IsDirectory(const Path: string): Boolean;
 function DosPathToUnixPath(const Path: string): string;
@@ -340,235 +331,6 @@ begin
   end;
 end;
 
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-{ Find the count'th occurence of the s string in the t string.              }
-{ If count < 0 then look from the back                                      }
-
-function Posn(const s, t: string; Count: Integer): Integer;
-var
-  i, h, Last: Integer;
-  u: string;
-begin
-  u := t;
-  if Count > 0 then
-  begin
-    Result := Length(t);
-    for i := 1 to Count do
-    begin
-      h := Pos(s, u);
-      if h > 0 then
-        u := Copy(u, h + 1, Length(u))
-      else
-      begin
-        u := '';
-        Inc(Result);
-      end;
-    end;
-    Result := Result - Length(u);
-  end
-  else if Count < 0 then
-  begin
-    Last := 0;
-    for i := Length(t) downto 1 do
-    begin
-      u := Copy(t, i, Length(t));
-      h := Pos(s, u);
-      if (h <> 0) and ((h + i) <> Last) then
-      begin
-        Last := h + i - 1;
-        Inc(Count);
-        if Count = 0 then
-          Break;
-      end;
-    end;
-    if Count = 0 then
-      Result := Last
-    else
-      Result := 0;
-  end
-  else
-    Result := 0;
-end;
-
-{* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *}
-{ Syntax of an URL: protocol://[user[:password]@]server[:port]/path         }
-
-procedure ParseURL(const url: string; var Proto, User, Pass, Host, Port, Path:
-  string);
-var
-  p, q, i: Integer;
-  s: string;
-  CurPath: string;
-begin
-  CurPath := Path;
-  Proto := '';
-  User := '';
-  Pass := '';
-  Host := '';
-  Port := '';
-  Path := '';
-
-  if Length(url) < 1 then Exit;
-  try
-    { Handle path beginning with "./" or "../".          }
-    { This code handle only simple cases !               }
-    { Handle path relative to current document directory }
-    if (Copy(url, 1, 2) = './') then
-    begin
-      p := Posn('/', CurPath, -1);
-      if p > Length(CurPath) then
-        p := 0;
-      if p = 0 then
-        CurPath := '/'
-      else
-        CurPath := Copy(CurPath, 1, p);
-      Path := CurPath + Copy(url, 3, Length(url));
-      Exit;
-    end
-      { Handle path relative to current document parent directory }
-    else if (Copy(url, 1, 3) = '../') then
-    begin
-      p := Posn('/', CurPath, -1);
-      if p > Length(CurPath) then
-        p := 0;
-      if p = 0 then
-        CurPath := '/'
-      else
-        CurPath := Copy(CurPath, 1, p);
-
-      s := Copy(url, 4, Length(url));
-      { We could have several levels }
-      while True do
-      begin
-        CurPath := Copy(CurPath, 1, p - 1);
-        p := Posn('/', CurPath, -1);
-        if p > Length(CurPath) then
-          p := 0;
-        if p = 0 then
-          CurPath := '/'
-        else
-          CurPath := Copy(CurPath, 1, p);
-        if (Copy(s, 1, 3) <> '../') then
-          Break;
-        s := Copy(s, 4, Length(s));
-      end;
-
-      Path := CurPath + Copy(s, 1, Length(s));
-      Exit;
-    end;
-
-    p := Pos('://', url);
-    q := p;
-    if p <> 0 then
-    begin
-      s := LowerCase(Copy(url, 1, p - 1));
-      for i := 1 to Length(s) do
-      begin
-        if not (AnsiChar(s[i]) in UriProtocolSchemeAllowedChars) then
-        begin
-          q := i;
-          Break;
-        end;
-      end;
-      if q < p then
-      begin
-        p := 0;
-        Proto := 'http';
-      end;
-    end;
-    if p = 0 then
-    begin
-      if (url[1] = '/') then
-      begin
-        { Relative path without protocol specified }
-        Proto := 'http';
-        p := 1;
-        if (Length(url) > 1) and (url[2] <> '/') then
-        begin
-          { Relative path }
-          Path := Copy(url, 1, Length(url));
-          Exit;
-        end;
-      end
-      else if LowerCase(Copy(url, 1, 5)) = 'http:' then
-      begin
-        Proto := 'http';
-        p := 6;
-        if (Length(url) > 6) and (url[7] <> '/') then
-        begin
-          { Relative path }
-          Path := Copy(url, 6, Length(url));
-          Exit;
-        end;
-      end
-      else if LowerCase(Copy(url, 1, 7)) = 'mailto:' then
-      begin
-        Proto := 'mailto';
-        p := Pos(':', url);
-      end;
-    end
-    else
-    begin
-      Proto := LowerCase(Copy(url, 1, p - 1));
-      Inc(p, 2);
-    end;
-    s := Copy(url, p + 1, Length(url));
-
-    p := Pos('/', s);
-    q := Pos('?', s);
-    if (q > 0) and ((q < p) or (p = 0)) then
-      p := q;
-    if p = 0 then
-      p := Length(s) + 1;
-    Path := Copy(s, p, Length(s));
-    s := Copy(s, 1, p - 1);
-
-    p := Posn(':', s, -1);
-    if p > Length(s) then
-      p := 0;
-    q := Posn('@', s, -1);
-    if q > Length(s) then
-      q := 0;
-    if (p = 0) and (q = 0) then
-    begin { no user, password or port }
-      Host := s;
-      Exit;
-    end
-    else if q < p then
-    begin { a port given }
-      Port := Copy(s, p + 1, Length(s));
-      Host := Copy(s, q + 1, p - q - 1);
-      if q = 0 then
-        Exit; { no user, password }
-      s := Copy(s, 1, q - 1);
-    end
-    else
-    begin
-      Host := Copy(s, q + 1, Length(s));
-      s := Copy(s, 1, q - 1);
-    end;
-    p := Pos(':', s);
-    if p = 0 then
-      User := s
-    else
-    begin
-      User := Copy(s, 1, p - 1);
-      Pass := Copy(s, p + 1, Length(s));
-    end;
-  finally
-    if (Port = '') then
-    begin
-      if SameText(Proto, 'http') then
-        Port := '80'
-      else if SameText(Proto, 'https') then
-        Port := '443';
-    end;
-
-    if (Path = '') then
-      Path := '/';
-  end;
-end;
-
 function IsDirectory(const Path: string): Boolean;
 var
   Attr: DWORD;
@@ -610,7 +372,7 @@ begin
     Result := Format('%.2fP ', [Bytes / PBYTES]);
 end;
 
-function FormatDirEntry(const Path: string; F: THttpDirEntry): string;
+function FormatDirEntry(const Path: string; F: THttpFileEntry): string;
 var
   Attr, Link, NameString, SizeString: string;
 begin
@@ -653,7 +415,7 @@ begin
     '<TD WIDTH="5%" ALIGN="LEFT" NOWRAP>' + Attr + '</TD>' +
     '<TD WIDTH="%15" ALIGN="right" NOWRAP>' + SizeString + '</TD>' +
     '<TD WIDTH="5%" NOWRAP></TD>' +
-    '<TD WIDTH="20%" NOWRAP>' + Format('%.4d-%.2d-%.2d %.2d:%.2d:%.2d', [F.Year, F.Month, F.Day, F.Hour, F.Min, F.Sec]) + '</TD>';
+    '<TD WIDTH="20%" NOWRAP>' + FormatDateTime('YYYY-MM-DD HH:NN:SS', F.Time) + '</TD>';
 end;
 
 function PathToURL(const Path: string): string;
@@ -694,7 +456,7 @@ var
   F: TSearchRec;
   DirList: TStringList;
   FileList: TStringList;
-  Data: THttpDirEntry;
+  Data: THttpFileEntry;
   i: Integer;
   ms: Word;
   Total: Cardinal;
@@ -709,11 +471,10 @@ begin
   begin
     if (F.Name <> '.') and (F.Name <> '..') then
     begin
-      Data := THttpDirEntry.Create;
-      Data.Visible := True;
+      Data := THttpFileEntry.Create;
       Data.Name := F.Name;
       Data.Size := F.Size;
-      DecodeDateTime(F.TimeStamp, Data.Year, Data.Month, Data.Day, Data.Hour, Data.Min, Data.Sec, ms);
+      Data.Time := F.TimeStamp;
       Data.Directory := ((F.Attr and faDirectory) <> 0);
       Data.ReadOnly := ((F.Attr and faReadOnly) <> 0);
       Data.SysFile := ((F.Attr and faSysFile) <> 0);
@@ -779,14 +540,14 @@ begin
 
     for i := 0 to DirList.Count - 1 do
     begin
-      Data := THttpDirEntry(DirList.Objects[i]);
+      Data := THttpFileEntry(DirList.Objects[i]);
       HTML := HTML + '<TR>' + FormatDirEntry(RequestPath, Data) + '</TR>';
       Data.Free;
     end;
 
     for i := 0 to FileList.Count - 1 do
     begin
-      Data := THttpDirEntry(FileList.Objects[i]);
+      Data := THttpFileEntry(FileList.Objects[i]);
       HTML := HTML + '<TR>' + FormatDirEntry(RequestPath, Data) + '</TR>';
       TotalBytes := TotalBytes + Data.Size;
       Data.Free;
