@@ -690,8 +690,7 @@ procedure TIocpHttpServer.ParseRecvData(Client: TIocpHttpConnection;
   buf: Pointer; len: Integer);
 var
   pch: PAnsiChar;
-  ch: AnsiChar;
-  CR, LF: Integer;
+  CR, LF, I: Integer;
 begin
   // 在这里解析客户端浏览器发送过来的请求数据
   if (Client.FHttpState = hcDone) then
@@ -707,25 +706,24 @@ begin
   pch := buf;
   CR := 0;
   LF := 0;
+  I := 0;
   while (len > 0) and (Client.FHttpState <> hcDone) do
   begin
-    ch := pch^;
-
-    if (ch = #13) then
-      Inc(CR)
-    else if (ch = #10) then
-      Inc(LF)
-    else
-    begin
-      CR := 0;
-      LF := 0;
-    end;
-
     if (Client.FHttpState = hcRequest) then
     begin
-      Client.RawRequestText.Write(ch, 1);
+      case pch^ of
+        #13: Inc(CR);
+        #10: Inc(LF);
+      else
+        CR := 0;
+        LF := 0;
+      end;
+
+      Inc(I);
       if (CR = 2) and (LF = 2) then
       begin
+        // 整块写入，提高效率
+        Client.RawRequestText.Write(buf^, I);
         if not Client.ParseRequestData then
         begin
           Client.Disconnect;
