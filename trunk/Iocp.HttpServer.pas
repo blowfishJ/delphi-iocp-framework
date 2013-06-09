@@ -707,7 +707,7 @@ begin
   CR := 0;
   LF := 0;
   I := 0;
-  while (len > 0) and (Client.FHttpState <> hcDone) do
+  while (len > 0) do
   begin
     if (Client.FHttpState = hcRequest) then
     begin
@@ -744,7 +744,10 @@ begin
           Client.FHttpState := hcPostData;
           Client.FAcceptPostData := TriggerAcceptPostData(Client.FRequestContentLength);
         end else
+        begin
           Client.FHttpState := hcDone;
+          Break;
+        end;
       end;
 
       Dec(len);
