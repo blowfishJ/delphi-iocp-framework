@@ -1386,13 +1386,19 @@ begin
     for Client in FConnectionList.Values.ToArray do
     begin
       Client._CloseSocket;
-      Client.Disconnect;
+      {$IFDEF __TIME_OUT_TIMER__}
+      Client.FTimer.Release;
+      {$ENDIF}
+      Client.Release;
     end;
 
     for Client in FIdleConnectionList.Values.ToArray do
     begin
       Client._CloseSocket;
-      Client.Disconnect;
+      {$IFDEF __TIME_OUT_TIMER__}
+      Client.FTimer.Release;
+      {$ENDIF}
+      Client.Release;
     end;
   finally
     FConnectionListLocker.Leave;
