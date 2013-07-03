@@ -124,7 +124,7 @@ begin
     Exit;
   end;
 
-  FServer.Addr := '127.0.0.1';
+  FServer.Addr := '';
   FServer.Port := StrToIntDef(edtPort.Text, 80);
   FServer.Timeout := StrToIntDef(edtTimeout.Text, 0);
   FServer.ClientLife := StrToIntDef(edtLife.Text, 0);
