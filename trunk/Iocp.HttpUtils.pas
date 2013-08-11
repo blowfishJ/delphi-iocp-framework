@@ -458,7 +458,6 @@ var
   FileList: TStringList;
   Data: THttpFileEntry;
   i: Integer;
-  ms: Word;
   Total: Cardinal;
   TotalBytes: Int64;
   Document, HTML: string;
