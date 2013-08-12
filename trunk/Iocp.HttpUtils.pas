@@ -19,6 +19,7 @@ type
 {$region '»ù´¡º¯Êý'}
 procedure ByteToHex(B: Byte; P: PChar);
 function HexToByte(P: PChar): Byte;
+function IsSafeChar(Ch: AnsiChar): Boolean; inline;
 function RFC1123_Date(const ADate: TDateTime): string;
 {$endregion}
 
@@ -71,6 +72,15 @@ begin
   end;
 end;
 
+function IsSafeChar(Ch: AnsiChar): Boolean;
+const
+  // "<>%\^[]`+$,@:;/!#?=&
+  UNSAFE_CHARS =
+    ['"', '<', '>', '%', '\', '^', '[', ']', '`', '+', '$', ',', '@', ':', ';', '/', '!', '#', '?', '=', '&'];
+begin
+  Result := not (Ch in UNSAFE_CHARS) and (Byte(Ch) in [33..122]);
+end;
+
 function URLEncode(const S: string; Encodeing: TEncoding = nil): string;
 var
   I, J: Integer;
@@ -92,20 +102,18 @@ begin
   for I := Low(LBytes) to High(LBytes) do
   begin
     B := LBytes[I];
-    case B of
-      Byte('0')..Byte('9'), Byte('A')..Byte('Z'), Byte('a')..Byte('z'),
-      Byte('$'), Byte('-'), Byte('_'), Byte('.'), Byte('!'), Byte('*'),
-      Byte(''''), Byte('('), Byte(')'), Byte(','):
-        begin
-          Inc(J);
-          RStr[J] := Char(B);
-        end;
-      Byte(' '):
-        begin
-          Inc(J);
-          RStr[J] := '+';
-        end
-    else
+
+    if IsSafeChar(AnsiChar(B)) then
+    begin
+      Inc(J);
+      RStr[J] := Char(B);
+    end else
+    if (AnsiChar(B) = ' ') then
+    begin
+      Inc(J);
+      RStr[J] := '+';
+    end else
+    begin
       Inc(J);
       RStr[J] := '%';
       ByteToHex(B, @RStr[J + 1]);
