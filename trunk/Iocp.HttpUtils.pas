@@ -93,12 +93,18 @@ begin
   begin
     B := LBytes[I];
     case B of
-      Byte('0')..Byte('9'), Byte('A')..Byte('Z'), Byte('a')..Byte('z'):
+      Byte('0')..Byte('9'), Byte('A')..Byte('Z'), Byte('a')..Byte('z'),
+      Byte('$'), Byte('-'), Byte('_'), Byte('.'), Byte('!'), Byte('*'),
+      Byte(''''), Byte('('), Byte(')'), Byte(','):
         begin
           Inc(J);
           RStr[J] := Char(B);
         end;
-      Byte(' '): RStr[J] := '+';
+      Byte(' '):
+        begin
+          Inc(J);
+          RStr[J] := '+';
+        end
     else
       Inc(J);
       RStr[J] := '%';
