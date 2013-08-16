@@ -75,6 +75,9 @@ type
     FAuthenticationManager: TDSCustomAuthenticationManager;
     FProtocolHandlerFactory: TDSJSONProtocolHandlerFactory;
     FTCPServer: TIocpDatasnapServer;
+  private
+    function GetPort: Word;
+    procedure SetPort(const Value: Word);
   protected
     procedure SetAuthenticationManager(const AuthManager: TDSCustomAuthenticationManager); virtual;
     { TDSServerTransport }
@@ -95,6 +98,7 @@ type
     property Filters;
 
     property AuthenticationManager: TDSCustomAuthenticationManager read FAuthenticationManager write SetAuthenticationManager;
+    property Port: Word read GetPort write SetPort;
     property TCPServer: TIocpDatasnapServer read FTCPServer;
   end;
 
@@ -132,6 +136,11 @@ begin
   inherited;
 end;
 
+function TIocpDataSnapTransport.GetPort: Word;
+begin
+  Result := FTCPServer.Port;
+end;
+
 procedure TIocpDataSnapTransport.Notification(AComponent: TComponent;
   Operation: TOperation);
 begin
@@ -155,6 +164,11 @@ begin
 
   if Assigned(FAuthenticationManager) then
     FAuthenticationManager.FreeNotification(Self);
+end;
+
+procedure TIocpDataSnapTransport.SetPort(const Value: Word);
+begin
+  FTCPServer.Port := Value;
 end;
 
 procedure TIocpDataSnapTransport.SetServer(const AServer: TDSCustomServer);
