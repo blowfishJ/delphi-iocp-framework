@@ -1030,7 +1030,7 @@ begin
       if (PerIoData = nil) and (Connection = nil) then
       begin
         LastErr := GetLastError;
-        if (LastErr <> ERROR_ABANDONED_WAIT_0) then
+        //if (LastErr <> ERROR_ABANDONED_WAIT_0) then
           AppendLog('%s IoThread %d ERROR %d=%s', [FOwner.ClassName, ThreadID, LastErr, SysErrorMessage(LastErr)], ltError);
         Break;
       end;
@@ -2370,6 +2370,7 @@ end;
 initialization
   Iocp.Winsock2.InitializeWinSock;
   Iocp.Wship6.InitLibrary;
+  InitializeStubsEx;
 
 finalization
   Iocp.Winsock2.UninitializeWinSock;
