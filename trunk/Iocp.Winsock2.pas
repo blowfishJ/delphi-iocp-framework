@@ -6050,7 +6050,7 @@ begin
     @TransmitPackets := FixupStubEx(LSocket, 'TransmitPackets', WSAID_TRANSMITPACKETS); {Do not localize}
 
     {$IFNDEF WINCE}
-    @WSASendMsg := FixupStubEx(LSocket, 'WSASendMsg', WSAID_WSASENDMSG); {Do not localize}
+//    @WSASendMsg := FixupStubEx(LSocket, 'WSASendMsg', WSAID_WSASENDMSG); {Do not localize}
 //    @WSAPoll := FixupStubEx(LSocket, 'WSAPoll', WSAID_WSAPOLL); {Do not localize}
     {$ENDIF}
   finally
