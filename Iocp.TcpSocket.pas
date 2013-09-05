@@ -994,7 +994,6 @@ constructor TIocpIoThread.Create(IocpSocket: TIocpTcpSocket);
 begin
   inherited Create(True);
 
-  FreeOnTerminate := True;
   FOwner := IocpSocket;
 
   Suspended := False;
@@ -1065,7 +1064,6 @@ end;
 constructor TIocpAcceptThread.Create(IocpSocket: TIocpTcpSocket);
 begin
   inherited Create(True);
-  FreeOnTerminate := True;
 
   FOwner := IocpSocket;
   FLocker := TCriticalSection.Create;
@@ -2067,7 +2065,8 @@ begin
   if Assigned(FAcceptThread) then
   begin
     FAcceptThread.Quit;
-    FAcceptThread := nil;
+    FAcceptThread.WaitFor;
+    FreeAndNil(FAcceptThread);
   end;
 
   // 关闭IO线程
@@ -2079,6 +2078,10 @@ begin
 
   // 等待IO线程结束
   WaitForMultipleObjects(Length(FIoThreadHandles), Pointer(FIoThreadHandles), True, LTimeout);
+
+  // 释放线程对象
+  for i := Low(FIoThreads) to High(FIoThreads) do
+    FIoThreads[I].Free;
   SetLength(FIoThreads, 0);
   SetLength(FIoThreadHandles, 0);
 

@@ -81,7 +81,6 @@ constructor TProcessorThread.Create(Pool: TIocpThreadPool);
 begin
   inherited Create(True);
 
-  FreeOnTerminate := True;
   FPool := Pool;
 
   FTag := nil;
@@ -197,6 +196,10 @@ begin
 
   // 等待工作线程结束
   WaitForMultipleObjects(Length(FThreadHandles), Pointer(FThreadHandles), True, INFINITE);
+
+  // 释放线程对象
+  for i := 0 to High(FThreads) do
+    FThreads[I].Free;
 
   // 关闭完成端口句柄
   CloseHandle(FIocpHandle);
