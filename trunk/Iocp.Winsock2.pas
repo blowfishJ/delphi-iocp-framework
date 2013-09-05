@@ -5035,6 +5035,7 @@ type
   procedure InitializeWinSock;
   {$NODEFINE UninitializeWinSock}
   procedure UninitializeWinSock;
+  procedure InitializeStubsEx;
   function Winsock2Loaded: Boolean;
   function WinsockHandle : THandle;
 
@@ -6033,6 +6034,30 @@ begin
 end;
 {$ENDIF}
 
+procedure InitializeStubsEx;
+var
+  LSocket: TSocket;
+begin
+  LSocket := WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, nil, 0, WSA_FLAG_OVERLAPPED);
+  try
+    @AcceptEx := FixupStubEx(LSocket, 'AcceptEx', WSAID_ACCEPTEX);
+    @GetAcceptExSockaddrs := FixupStubEx(LSocket, 'GetAcceptExSockaddrs', WSAID_GETACCEPTEXSOCKADDRS); {Do not localize}
+    @ConnectEx := FixupStubEx(LSocket, 'ConnectEx', WSAID_CONNECTEX); {Do not localize}
+    @DisconnectEx := FixupStubEx(LSocket, 'DisconnectEx', WSAID_DISCONNECTEX); {Do not localize}
+    @WSARecvMsg := FixupStubEx(LSocket, 'WSARecvMsg', WSAID_WSARECVMSG); {Do not localize}
+    @WSARecvMsg := FixupStubEx(LSocket, 'WSARecvMsg', WSAID_WSARECVMSG); {Do not localize}
+    @TransmitFile := FixupStubEx(LSocket, 'TransmitFile', WSAID_TRANSMITFILE); {Do not localize}
+    @TransmitPackets := FixupStubEx(LSocket, 'TransmitPackets', WSAID_TRANSMITPACKETS); {Do not localize}
+
+    {$IFNDEF WINCE}
+    @WSASendMsg := FixupStubEx(LSocket, 'WSASendMsg', WSAID_WSASENDMSG); {Do not localize}
+//    @WSAPoll := FixupStubEx(LSocket, 'WSAPoll', WSAID_WSAPOLL); {Do not localize}
+    {$ENDIF}
+  finally
+    closesocket(LSocket);
+  end;
+end;
+
 procedure InitializeStubs;
 {Alphabetize these so we can more easily determine what's available on a platform.
 by section in Winsock SDK reference}
@@ -6717,7 +6742,12 @@ end;
 initialization
   in6addr_any := IN6ADDR_ANY_INIT;
   in6addr_loopback := IN6ADDR_LOOPBACK_INIT;
+//  InitializeWinSock;
   InitializeStubs;
+//  InitializeStubsEx;
+
+finalization
+//  UninitializeWinSock;
 
 end.
 
