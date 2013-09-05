@@ -582,6 +582,8 @@ locations.  hWship6Dll is kept so we can unload the Wship6.dll if necessary.
 end;
 
 initialization
+  InitLibrary;
+
 finalization
   CloseLibrary;
 

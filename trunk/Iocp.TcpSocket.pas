@@ -2368,12 +2368,12 @@ begin
 end;
 
 initialization
-  Iocp.Winsock2.InitializeWinSock;
-  Iocp.Wship6.InitLibrary;
-  InitializeStubsEx;
+//  Iocp.Winsock2.InitializeWinSock;
+//  Iocp.Wship6.InitLibrary;
+//  InitializeStubsEx;
 
 finalization
-  Iocp.Winsock2.UninitializeWinSock;
+//  Iocp.Winsock2.UninitializeWinSock;
 
 end.
 

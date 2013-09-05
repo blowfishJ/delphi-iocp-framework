@@ -6742,12 +6742,12 @@ end;
 initialization
   in6addr_any := IN6ADDR_ANY_INIT;
   in6addr_loopback := IN6ADDR_LOOPBACK_INIT;
-//  InitializeWinSock;
   InitializeStubs;
-//  InitializeStubsEx;
+  InitializeWinSock;
+  InitializeStubsEx;
 
 finalization
-//  UninitializeWinSock;
+  UninitializeWinSock;
 
 end.
 
