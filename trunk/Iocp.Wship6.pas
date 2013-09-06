@@ -32,7 +32,7 @@ unit Iocp.Wship6;
 
 interface
 
-{$I IdCompilerDefines.inc}
+{$I Iocp.CompilerDefines.inc}
 
 {$IFDEF FPC}
   {$IFDEF WIN32}
