@@ -137,7 +137,7 @@ unit Iocp.Winsock2;
 
 interface
 
-{$I IdCompilerDefines.inc}
+{$I Iocp.CompilerDefines.inc}
 
 {
 Important!!!

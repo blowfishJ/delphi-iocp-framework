@@ -208,7 +208,7 @@
   {$ENDIF}
 {$ENDIF}
 
-//Delphi & CBuilder XE3 (Pulsar)
+//Delphi & CBuilder XE3 & Above
 {$if COMPILERVERSION >= 24}
   // DCC is now defined by the compiler
   {$DEFINE VCL_XE2}
