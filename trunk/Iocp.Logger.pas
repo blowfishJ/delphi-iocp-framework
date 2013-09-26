@@ -122,6 +122,7 @@ begin
     begin
       FFileWriters[i].Flush;
       FFileWriters[i].Terminate;
+      FFileWriters[i].Free;
       FFileWriters[i] := nil;
     end;
     FFileLocker[i].Free;
@@ -318,7 +319,7 @@ begin
 
   inherited Create(True);
 
-  FreeOnTerminate := True;
+//  FreeOnTerminate := True;
 
   FLocker := TCriticalSection.Create;
   FCacheBufferA := TMemoryStream.Create;
@@ -335,12 +336,17 @@ end;
 
 destructor TCacheFileStream.Destroy;
 begin
-  if Assigned(FCacheBufferA) then
-    FreeAndNil(FCacheBufferA);
-  if Assigned(FCacheBufferB) then
-    FreeAndNil(FCacheBufferB);
-  if Assigned(FFileStream) then
-    FreeAndNil(FFileStream);
+  Lock;
+  try
+    if Assigned(FCacheBufferA) then
+      FreeAndNil(FCacheBufferA);
+    if Assigned(FCacheBufferB) then
+      FreeAndNil(FCacheBufferB);
+    if Assigned(FFileStream) then
+      FreeAndNil(FFileStream);
+  finally
+    Unlock;
+  end;
   if Assigned(FLocker) then
     FreeAndNil(FLocker);
 
@@ -445,13 +451,16 @@ var
 
 function gIocpLogger: TIocpLogger;
 begin
-  if (TInterlocked.CompareExchange<TIocpLogger>(_gIocpLogger, nil, nil) <> nil) then Exit(_gIocpLogger);
+{  if (TInterlocked.CompareExchange<TIocpLogger>(_gIocpLogger, nil, nil) <> nil) then Exit(_gIocpLogger);
 
   Result := TIocpLogger.Create;
-  TInterlocked.Exchange<TIocpLogger>(_gIocpLogger, Result);
+  TInterlocked.Exchange<TIocpLogger>(_gIocpLogger, Result);}
+
+  Result := _gIocpLogger;
 end;
 
 initialization
+  _gIocpLogger := TIocpLogger.Create;
 
 finalization
   if Assigned(_gIocpLogger) then
