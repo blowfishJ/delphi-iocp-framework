@@ -338,6 +338,8 @@ destructor TCacheFileStream.Destroy;
 begin
   Lock;
   try
+    FCacheBuffer := nil;
+
     if Assigned(FCacheBufferA) then
       FreeAndNil(FCacheBufferA);
     if Assigned(FCacheBufferB) then
@@ -377,13 +379,13 @@ var
   Buffer: TMemoryStream;
 begin
   // 如果当前缓存中没有数据，则不用写文件
-  if (FCacheBuffer.Position <= 0) then Exit;
+  if (FCacheBuffer = nil) or (FCacheBuffer.Position <= 0) then Exit;
 
   // 双缓冲策略：
   // 读取当前缓存数据，并将另一缓存置为当前缓存
   // 这个过程需要加锁，TCacheFileStream.Write中也需要加同一个锁
-  Buffer := FCacheBuffer;
   Lock;
+  Buffer := FCacheBuffer;
   if (FCacheBuffer = FCacheBufferA) then
     FCacheBuffer := FCacheBufferB
   else
@@ -391,14 +393,11 @@ begin
   FCacheBuffer.Position := 0;
   Unlock;
 
-  try
-    // 将缓存中的数据追加到文件尾
-    FFileStream.Seek(0, soEnd);
-    FFileStream.Write(Buffer.Memory^, Buffer.Position);
-    FlushFileBuffers(FFileStream.Handle);
-  finally
-    Buffer.Position := 0;
-  end;
+  // 将缓存中的数据追加到文件尾
+  FFileStream.Seek(0, soEnd);
+  FFileStream.Write(Buffer.Memory^, Buffer.Position);
+  FlushFileBuffers(FFileStream.Handle);
+  Buffer.Position := 0;
 end;
 
 procedure TCacheFileStream.Lock;
