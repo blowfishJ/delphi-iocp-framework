@@ -1985,7 +1985,6 @@ end;
 
 procedure TIocpTcpSocket.StartupWorkers;
 var
-  si: TSystemInfo;
   NumberOfThreads, i: Integer;
 begin
   if (FIocpHandle <> 0) then Exit;
@@ -1994,10 +1993,7 @@ begin
 
   // 计算IO线程数
   if (FIoThreadsNumber <= 0) then
-  begin
-    GetSystemInfo(si);
-    NumberOfThreads := si.dwNumberOfProcessors * 2;
-  end
+    NumberOfThreads := CPUCount * 2
   else
     NumberOfThreads := Min(FIoThreadsNumber, 64);
 
