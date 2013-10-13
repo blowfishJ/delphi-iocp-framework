@@ -17,12 +17,16 @@ type
   TIocpThreadPool = class;
   TProcessorThread = class;
 
-  // 储存请求数据的基本类
-  TIocpThreadRequest = class(TObject)
+  // 线程池请求类
+  TIocpThreadRequest = class abstract(TObject)
+  private
+    FThread: TProcessorThread;
   protected
     // 线程池工作函数
     // 继承这个方法填写自己的线程代码
-    procedure Execute(Thread: TProcessorThread); virtual;
+    procedure Execute; virtual; abstract;
+  public
+    property Thread: TProcessorThread read FThread;
   end;
 
   // 工作线程
@@ -69,12 +73,6 @@ type
 
 implementation
 
-{ TIocpThreadRequest }
-
-procedure TIocpThreadRequest.Execute(Thread: TProcessorThread);
-begin
-end;
-
 { TProcessorThread }
 
 constructor TProcessorThread.Create(Pool: TIocpThreadPool);
@@ -104,7 +102,8 @@ begin
 
     if (Request <> nil) then
     try
-      Request.Execute(Self);
+      Request.FThread := Self;
+      Request.Execute;
     finally
       InterlockedDecrement(FPool.FPendingRequest);
       Request.Free;
@@ -154,15 +153,12 @@ end;
 procedure TIocpThreadPool.Startup;
 var
   NumberOfThreads, i: Integer;
-  si: TSystemInfo;
 begin
   if (FIocpHandle <> 0) then Exit;
 
   if (FNumberOfThreads <= 0) then
-  begin
-    GetSystemInfo(si);
-    NumberOfThreads := si.dwNumberOfProcessors * 2;
-  end else
+    NumberOfThreads := CPUCount * 2
+  else
     NumberOfThreads := Min(FNumberOfThreads, 64); // maximum count for WaitForMultipleObjects()
 
   // 创建完成端口

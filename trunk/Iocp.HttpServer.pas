@@ -126,7 +126,7 @@ type
   private
     Client: TIocpHttpConnection;
   protected
-    procedure Execute(Thread: TProcessorThread); override;
+    procedure Execute; override;
   public
     constructor Create(Client: TIocpHttpConnection);
   end;
@@ -612,7 +612,7 @@ begin
   Self.Client := Client;
 end;
 
-procedure TIocpHttpRequest.Execute(Thread: TProcessorThread);
+procedure TIocpHttpRequest.Execute;
 begin
   TIocpHttpServer(Client.Owner).DoOnRequest(Client);
   Client.Release;
