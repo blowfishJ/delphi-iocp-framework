@@ -72,7 +72,8 @@ type
     function AnswerHTML(const Header, HTML: string): Boolean; overload;
 
     // 以文件内容方式返回请求
-    function AnswerDocument(const FileName: string): Boolean;
+    function AnswerDocument(const FileName, ContentType: string): Boolean; overload;
+    function AnswerDocument(const FileName: string): Boolean; overload;
 
     // 返回错误信息
     procedure Answer400;
@@ -524,6 +525,33 @@ begin
   Result := AnswerStream(MakeHeader(Status, ContType, Header, Size), Stream);
 end;
 
+function TIocpHttpConnection.AnswerDocument(const FileName,
+  ContentType: string): Boolean;
+var
+  Header: string;
+  Stream: TFileStream;
+begin
+  Result := False;
+  try
+    Stream := Classes.TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  except
+    AnswerError(404);
+    Exit;
+  end;
+
+  try
+    Header :=
+      FVersion + ' 200 OK' + #13#10 +
+      'Content-Type: ' + ContentType + #13#10 +
+      'Content-Length: ' + IntToStr(Stream.Size) + #13#10 +
+      'Date: ' + RFC1123_Date(Now) + #13#10;
+
+    Result := AnswerStream(Header, Stream);
+  finally
+    Stream.Free;
+  end;
+end;
+
 function TIocpHttpConnection.AnswerDocument(const FileName: string): Boolean;
 var
   Header: string;
@@ -540,9 +568,10 @@ begin
   try
     Header :=
       FVersion + ' 200 OK' + #13#10 +
-      'Content-Type: file' + #13#10 +
+      'Content-Type: ' + DocumentToContentType(FileName) + #13#10 +
       'Content-Length: ' + IntToStr(Stream.Size) + #13#10 +
-      'Date: ' + RFC1123_Date(Now) + #13#10;
+      'Date: ' + RFC1123_Date(Now) + #13#10 +
+      'Accept-Ranges: bytes' + #13#10;
 
     Result := AnswerStream(Header, Stream);
   finally
