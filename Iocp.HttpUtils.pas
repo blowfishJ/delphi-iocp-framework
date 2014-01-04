@@ -34,6 +34,7 @@ function MakeCookie(const Name, Value: string; Expires: TDateTime;
 procedure SetHeader(Header: TStrings; const Key, Value: string); overload;
 procedure SetHeader(var Header: string; const Key, Value: string); overload;
 function FixHeader(const Header: string): string;
+function DocumentToContentType(const FileName: String): String;
 
 function IsDirectory(const Path: string): Boolean;
 function DosPathToUnixPath(const Path: string): string;
@@ -343,6 +344,55 @@ begin
     else
       Result := Result + #13#10#13#10;
   end;
+end;
+
+function DocumentToContentType(const FileName: String): String;
+var
+  Ext: String;
+begin
+  Ext := LowerCase(ExtractFileExt(FileName));
+  if Length(Ext) > 1 then
+    Ext := Copy(Ext, 2, Length(Ext));
+  if (Ext = 'htm') or (Ext = 'html') then
+    Result := 'text/html'
+  else if Ext = 'gif' then
+    Result := 'image/gif'
+  else if Ext = 'bmp' then
+    Result := 'image/bmp'
+  else if (Ext = 'jpg') or (Ext = 'jpeg') then
+    Result := 'image/jpeg'
+  else if (Ext = 'tif') or (Ext = 'tiff') then
+    Result := 'image/tiff'
+  else if Ext = 'txt' then
+    Result := 'text/plain'
+  else if Ext = 'css' then
+    Result := 'text/css'
+  else if Ext = 'wav' then
+    Result := 'audio/x-wav'
+  else if Ext = 'ico' then
+    Result := 'image/x-icon'
+  { WAP support begin }
+  else if Ext = 'wml' then
+    Result := 'text/vnd.wap.wml'
+  else if Ext = 'wbmp' then
+    Result := 'image/vnd.wap.wbmp'
+  else if Ext = 'wmlc' then
+    Result := 'application/vnd.wap.wmlc'
+  else if Ext = 'wmlscript' then
+    Result := 'text/vnd.wap.wmlscript'
+  else if Ext = 'wmlscriptc' then
+    Result := 'application/vnd.wap.wmlscriptc'
+  { WAP support end }
+  else if Ext = 'pdf' then
+    Result := 'application/pdf'
+  else if Ext = 'png' then
+    Result := 'image/png'
+  else if Ext = 'xml' then
+    Result := 'application/xml'
+  else if Ext = 'xhtml' then
+    Result := 'application/xhtml+xml'
+  else
+    Result := 'application/binary';
 end;
 
 function IsDirectory(const Path: string): Boolean;
