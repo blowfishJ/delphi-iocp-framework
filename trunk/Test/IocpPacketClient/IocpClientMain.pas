@@ -17,7 +17,7 @@ type
     procedure SavePacketHeader(const Packet: TIocpPacket);
     procedure SavePacketData(const Packet: TIocpPacket);
   protected
-    function TriggerClientConnected(Client: TIocpSocketConnection): Boolean; override;
+    procedure TriggerClientConnected(Client: TIocpSocketConnection); override;
     procedure TriggerPacketRecv(Client: TIocpPacketConnection; const Packet: TIocpPacket); override;
     procedure TriggerPacketHeaderCrcError(Client: TIocpPacketConnection; const Packet: TIocpPacket); override;
     procedure TriggerPacketDataCrcError(Client: TIocpPacketConnection; const Packet: TIocpPacket); override;
@@ -167,9 +167,8 @@ begin
   Stream.Free;
 end;
 
-function TTestIocpClient.TriggerClientConnected(Client: TIocpSocketConnection): Boolean;
+procedure TTestIocpClient.TriggerClientConnected(Client: TIocpSocketConnection);
 begin
-  Result := True;
   SendTestData(Client);
 end;
 

@@ -132,7 +132,7 @@ type
     constructor Create(Client: TIocpHttpConnection);
   end;
 
-  TIocpHttpAcceptPostDataEvent = function(Sender: TObject; DataSize: Int64): Boolean of object;
+  TIocpHttpAcceptPostDataEvent = procedure(Sender: TObject; DataSize: Int64; var Accept: Boolean) of object;
   TIocpHttpRequestEvent = procedure(Sender: TObject; Client: TIocpHttpConnection) of object;
   TIocpHttpServer = class(TSimpleIocpTcpServer)
   private
@@ -152,10 +152,10 @@ type
     procedure ShutdownWorkers; override;
     {$endif}
 
-    function TriggerClientRecvData(Client: TIocpSocketConnection; buf: Pointer; len: Integer): Boolean; override;
-    function TriggerClientSentData(Client: TIocpSocketConnection; buf: Pointer; len: Integer): Boolean; override;
+    procedure TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer); override;
+    procedure TriggerClientSentData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer); override;
   protected
-    function TriggerAcceptPostData(DataSize: Int64): Boolean; virtual;
+    procedure TriggerAcceptPostData(DataSize: Int64; var Accept: Boolean); virtual;
 
     // DoOnRequest 将会在线程池中被调用，可以在这个函数里处理用户自定义的回执数据
     procedure DoOnRequest(Client: TIocpHttpConnection); virtual;
@@ -771,7 +771,8 @@ begin
           Client.FRequestPostData.Size := 0;
           Client.FPostDataSize := 0;
           Client.FHttpState := hcPostData;
-          Client.FAcceptPostData := TriggerAcceptPostData(Client.FRequestContentLength);
+          Client.FAcceptPostData := True;
+          TriggerAcceptPostData(Client.FRequestContentLength, Client.FAcceptPostData);
         end else
         begin
           Client.FHttpState := hcDone;
@@ -829,24 +830,23 @@ begin
 end;
 {$endif}
 
-function TIocpHttpServer.TriggerAcceptPostData(DataSize: Int64): Boolean;
+procedure TIocpHttpServer.TriggerAcceptPostData(DataSize: Int64; var Accept: Boolean);
 begin
   if Assigned(FAcceptPostData) then
-    Result := FAcceptPostData(Self, DataSize)
-  else
-    Result := True;
+    FAcceptPostData(Self, DataSize, Accept);
 end;
 
-function TIocpHttpServer.TriggerClientRecvData(Client: TIocpSocketConnection;
-  buf: Pointer; len: Integer): Boolean;
+procedure TIocpHttpServer.TriggerClientRecvData(Client: TIocpSocketConnection;
+  Buf: Pointer; Len: Integer);
 begin
+  inherited TriggerClientRecvData(Client, Buf, Len);
   ParseRecvData(TIocpHttpConnection(Client), buf, len);
-  Result := True;
 end;
 
-function TIocpHttpServer.TriggerClientSentData(Client: TIocpSocketConnection;
-  buf: Pointer; len: Integer): Boolean;
+procedure TIocpHttpServer.TriggerClientSentData(Client: TIocpSocketConnection;
+  Buf: Pointer; Len: Integer);
 begin
+  inherited TriggerClientSentData(Client, Buf, Len);
   with TIocpHttpConnection(Client) do
   begin
     // 如果客户端是HTTP/1.0的请求，回复完数据之后需要断开连接
@@ -856,8 +856,6 @@ begin
     if not KeepAlive and (FResponseSize > 0) and (FResponseSent >= FResponseSize) then
       Disconnect;
   end;
-
-  Result := True;
 end;
 
 end.

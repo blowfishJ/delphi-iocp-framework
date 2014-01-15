@@ -44,8 +44,8 @@ type
 
     function GetIdleConnection: TIocpHttpCliConnection;
   protected
-    function TriggerClientRecvData(Client: TIocpSocketConnection; buf: Pointer; len: Integer): Boolean; override;
-    function TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean; override;
+    procedure TriggerClientRecvData(Client: TIocpSocketConnection; buf: Pointer; len: Integer); override;
+    procedure TriggerClientDisconnected(Client: TIocpSocketConnection); override;
 
     procedure ParseRecvData(Client: TIocpHttpCliConnection; buf: Pointer; len: Integer);
   public
@@ -273,8 +273,8 @@ AppendLog('Socket %d Request Header: %s', [Conn.Socket, Content.DataString]);
   end;
 end;
 
-function TIocpHttpClient.TriggerClientDisconnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TIocpHttpClient.TriggerClientDisconnected(
+  Client: TIocpSocketConnection);
 begin
   with TIocpHttpCliConnection(Client) do
   begin
@@ -285,15 +285,12 @@ begin
     WaitForSingleObject(TIocpHttpCliConnection(Client).FRequestEvent, INFINITE);
     AppendLog('Socket %d Disconnect ok', [Client.Socket]);
   end;
-
-  Result := True;
 end;
 
-function TIocpHttpClient.TriggerClientRecvData(Client: TIocpSocketConnection;
-  buf: Pointer; len: Integer): Boolean;
+procedure TIocpHttpClient.TriggerClientRecvData(Client: TIocpSocketConnection;
+  buf: Pointer; len: Integer);
 begin
   ParseRecvData(TIocpHttpCliConnection(Client), buf, len);
-  Result := True;
 end;
 
 { TIocpHttpCliConnection }
