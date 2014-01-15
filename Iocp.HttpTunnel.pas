@@ -24,9 +24,9 @@ type
     function NewConnect(HttpTunnelConnection: TIocpHttpTunnelConnection): Boolean;
     function DoForward(HttpTunnelConnection: TIocpHttpTunnelConnection): Boolean;
   protected
-    function TriggerClientConnected(Client: TIocpSocketConnection): Boolean; override;
-    function TriggerClientRecvData(Client: TIocpSocketConnection; buf: Pointer; len: Integer): Boolean; override;
-    function TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean; override;
+    procedure TriggerClientConnected(Client: TIocpSocketConnection); override;
+    procedure TriggerClientRecvData(Client: TIocpSocketConnection; buf: Pointer; len: Integer); override;
+    procedure TriggerClientDisconnected(Client: TIocpSocketConnection); override;
   public
     constructor Create(AOwner: TComponent); override;
 
@@ -53,7 +53,7 @@ type
     FHttpAgent: TIocpHttpAgent;
     FConfirmForward: TConfirmForwardEvent;
   protected
-    function TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean; override;
+    procedure TriggerClientDisconnected(Client: TIocpSocketConnection); override;
     procedure DoOnRequest(Client: TIocpHttpConnection); override;
   protected
     // 重载这个方法决定是否转发当前请求
@@ -183,14 +183,14 @@ begin
   end;
 end;}
 
-function TIocpHttpAgent.TriggerClientConnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TIocpHttpAgent.TriggerClientConnected(
+  Client: TIocpSocketConnection);
 var
   ReqConn: TIocpHttpTunnelConnection;
   AgConn: TIocpHttpAgentConnection;
 begin
   ReqConn := Client.Tag;
-  if (ReqConn = nil) then Exit(False);
+  if (ReqConn = nil) then Exit;
 
   AgConn := TIocpHttpAgentConnection(Client);
 
@@ -201,14 +201,11 @@ begin
   finally
     ReqConn.AgentLocker.Leave;
   end;
-
-  Result := DoForward(ReqConn);
 end;
 
-function TIocpHttpAgent.TriggerClientDisconnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TIocpHttpAgent.TriggerClientDisconnected(
+  Client: TIocpSocketConnection);
 begin
-  Result := True;
   with TIocpHttpAgentConnection(Client) do
   try
     TunnelLocker.Enter;
@@ -223,13 +220,12 @@ begin
   end;
 end;
 
-function TIocpHttpAgent.TriggerClientRecvData(Client: TIocpSocketConnection;
-  buf: Pointer; len: Integer): Boolean;
+procedure TIocpHttpAgent.TriggerClientRecvData(Client: TIocpSocketConnection;
+  buf: Pointer; len: Integer);
 var
   FilePath: string;
   Stream: TStreamWriter;
 begin
-  Result := True;
   with TIocpHttpAgentConnection(Client) do
   try
     TunnelLocker.Enter;
@@ -353,10 +349,9 @@ begin
   end;
 end;
 
-function TIocpHttpTunnel.TriggerClientDisconnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TIocpHttpTunnel.TriggerClientDisconnected(
+  Client: TIocpSocketConnection);
 begin
-  Result := True;
   with TIocpHttpTunnelConnection(Client) do
   try
     AgentLocker.Enter;

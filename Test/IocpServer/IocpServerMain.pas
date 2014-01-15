@@ -15,7 +15,7 @@ const
 type
   TTestIocpServer = class(TSimpleIocpTcpServer)
   protected
-    function TriggerClientRecvData(Client: TIocpSocketConnection; buf: Pointer; len: Integer): Boolean; override;
+    procedure TriggerClientRecvData(Client: TIocpSocketConnection; buf: Pointer; len: Integer); override;
   end;
 
   TfmIocpServer = class(TForm)
@@ -177,8 +177,8 @@ end;
 
 { TTestIocpServer }
 
-function TTestIocpServer.TriggerClientRecvData(Client: TIocpSocketConnection;
-  buf: Pointer; len: Integer): Boolean;
+procedure TTestIocpServer.TriggerClientRecvData(Client: TIocpSocketConnection;
+  buf: Pointer; len: Integer);
 var
 {$ifdef __SND_FIXED_SIZE__}
   NewBuf: array [0..TEST_PACK_SIZE - 1] of Byte;
@@ -187,15 +187,14 @@ var
 {$endif}
   i: Integer;
 begin
-  Result := inherited TriggerClientRecvData(Client, buf, len);
-  if not Result then Exit;
+  inherited TriggerClientRecvData(Client, buf, len);
 
 {$ifdef __SND_FIXED_SIZE__}
   for i := 0 to TEST_PACK_SIZE - 1 do
   begin
     NewBuf[i] := i mod 256;
   end;
-  Result := (Client.Send(@NewBuf[0], TEST_PACK_SIZE) > 0);
+  Client.Send(@NewBuf[0], TEST_PACK_SIZE);
 {$else}
   GetMem(NewBuf, len);
   for i := 0 to len - 1 do

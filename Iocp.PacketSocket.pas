@@ -47,7 +47,7 @@ type
     Client: TIocpPacketConnection;
     Packet: PIocpPacket;
   protected
-    procedure Execute(Thread: TProcessorThread); override;
+    procedure Execute; override;
   public
     constructor Create(Client: TIocpPacketConnection; Packet: PIocpPacket);
   end;
@@ -68,7 +68,7 @@ type
     procedure ShutdownWorkers; override;
     {$endif}
 
-    function TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean; override;
+    procedure TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer); override;
   protected
     procedure TriggerPacketRecv(Client: TIocpPacketConnection; const Packet: TIocpPacket); virtual;
     procedure TriggerPacketHeaderCrcError(Client: TIocpPacketConnection; const Packet: TIocpPacket); virtual;
@@ -206,7 +206,7 @@ begin
   Self.Packet := Packet;
 end;
 
-procedure TIocpPacketRequest.Execute(Thread: TProcessorThread);
+procedure TIocpPacketRequest.Execute;
 begin
   if (Packet = nil) then Exit;
   TIocpPacketSocket(Client.Owner).TriggerPacketRecv(Client, Packet^);
@@ -247,14 +247,12 @@ begin
 end;
 {$endif}
 
-function TIocpPacketSocket.TriggerClientRecvData(Client: TIocpSocketConnection;
-  Buf: Pointer; Len: Integer): Boolean;
+procedure TIocpPacketSocket.TriggerClientRecvData(Client: TIocpSocketConnection;
+  Buf: Pointer; Len: Integer);
 var
   p: PByte;
   r: Integer;
 begin
-  Result := True;
-
   with TIocpPacketConnection(Client) do
   begin
     if (FRecvPacket = nil) then

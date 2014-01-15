@@ -138,15 +138,19 @@ type
 
     procedure IncPendingSend;
     procedure DecPendingSend;
-    function PostWrite(const Buf: Pointer; Size: Integer): Boolean;
 
-    procedure _TriggerClientRecvData(Buf: Pointer; Len: Integer);
-    procedure _TriggerClientSentData(Buf: Pointer; Len: Integer);
-    function _Send(Buf: Pointer; Size: Integer): Integer;
+    function _Send(Buf: Pointer; Size: Integer): Integer; virtual;
     procedure _CloseSocket;
   protected
     procedure Initialize; override;
     procedure Finalize; override;
+
+    function PostWrite(const Buf: Pointer; Size: Integer): Boolean; virtual;
+
+    procedure TriggerConnected; virtual;
+    procedure TriggerDisconnected; virtual;
+    procedure TriggerRecvData(Buf: Pointer; Len: Integer); virtual;
+    procedure TriggerSentData(Buf: Pointer; Len: Integer); virtual;
 
     {$IFDEF __TIME_OUT_TIMER__}
     procedure TriggerTimeout; virtual;
@@ -186,6 +190,7 @@ type
     property PendingSend: Integer read FPendingSend;
     property PendingRecv: Integer read FPendingRecv;
     property IsIPv6: Boolean read FIsIPv6;
+    property ConnectionSource: TConnectionSource read FConnectionSource;
     {$IFDEF __TIME_OUT_TIMER__}
     property Timeout: DWORD read FTimeout write FTimeout;
     property Life: DWORD read FLife write FLife;
@@ -267,8 +272,8 @@ type
     procedure Quit;
   end;
 
-  TIocpNotifyEvent = function(Sender: TObject; Client: TIocpSocketConnection): Boolean of object;
-  TIocpDataEvent = function(Sender: TObject; Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean of object;
+  TIocpNotifyEvent = procedure(Sender: TObject; Client: TIocpSocketConnection) of object;
+  TIocpDataEvent = procedure(Sender: TObject; Client: TIocpSocketConnection; Buf: Pointer; Len: Integer) of object;
 
   {
     *** 主要的Socket实现类 ***
@@ -324,11 +329,6 @@ type
     procedure RequestReadZeroComplete(Connection: TIocpSocketConnection; PerIoData: PIocpPerIoData);
     procedure RequestReadComplete(Connection: TIocpSocketConnection; PerIoData: PIocpPerIoData);
     procedure RequestWriteComplete(Connection: TIocpSocketConnection; PerIoData: PIocpPerIoData);
-
-    function _TriggerClientConnected(Client: TIocpSocketConnection): Boolean;
-    function _TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean;
-    function _TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean;
-    function _TriggerClientSentData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean;
   protected
     function ProcessMessage: Boolean;
     procedure MessagePump;
@@ -338,18 +338,18 @@ type
 
     // 重载下面几个方法可以实现在IO事件触发时做相应处理
     // 连接建立时触发
-    function TriggerClientConnected(Client: TIocpSocketConnection): Boolean; virtual;
+    procedure TriggerClientConnected(Client: TIocpSocketConnection); virtual;
 
     // 连接断开时触发
-    function TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean; virtual;
+    procedure TriggerClientDisconnected(Client: TIocpSocketConnection); virtual;
 
     // 接收到数据时触发
-    function TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean; virtual;
+    procedure TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer); virtual;
 
     // 发送数据完成时触发
     // 这里Buf只有指针本身是可以安全使用的，它所指向的内存数据很有可能已经被释放了
     // 所以千万不要在这个事件中去尝试访问Buf所指向的数据
-    function TriggerClientSentData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean; virtual;
+    procedure TriggerClientSentData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer); virtual;
   public
     constructor Create(AOwner: TComponent); overload; override;
     constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); reintroduce; overload;
@@ -370,6 +370,7 @@ type
 
     property ConnectionClass: TIocpSocketConnectionClass read GetConnectionClass write SetConnectionClass;
     property ConnectionList: TIocpSocketConnectionDictionary read FConnectionList;
+    property IoCachePool: TIocpMemoryPool read FIoCachePool;
     property ConnectionUsedMemory: Integer read GetConnectionUsedMemory;
     property ConnectionFreeMemory: Integer read GetConnectionFreeMemory;
     property PerIoDataPool: TIocpMemoryPool read FPerIoDataPool;
@@ -389,6 +390,7 @@ type
     property ClientLife: DWORD read FClientLife write FClientLife default 0;
     {$ENDIF}
     property MaxClients: Integer read FMaxClients write FMaxClients default 0;
+    property IoThreadsNumber: Integer read FIoThreadsNumber write FIoThreadsNumber default 0;
     property OnClientConnected: TIocpNotifyEvent read FOnClientConnected write FOnClientConnected;
     property OnClientDisconnected: TIocpNotifyEvent read FOnClientDisconnected write FOnClientDisconnected;
     property OnClientRecvData: TIocpDataEvent read FOnClientRecvData write FOnClientRecvData;
@@ -416,7 +418,7 @@ type
 
     procedure SetLineEndTag(const Value: RawByteString);
   protected
-    function TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean; override;
+    procedure TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer); override;
 
     procedure ParseRecvData(Client: TIocpLineSocketConnection; Buf: Pointer; Len: Integer); virtual;
 
@@ -519,7 +521,7 @@ begin
   if not Result then Exit;
 
   _CloseSocket;
-  Owner._TriggerClientDisconnected(Self);
+  Owner.TriggerClientDisconnected(Self);
   Owner.FreeConnection(Self);
 end;
 
@@ -771,15 +773,6 @@ begin
   end;
 end;
 
-procedure TIocpSocketConnection._TriggerClientRecvData(Buf: Pointer; Len: Integer);
-begin
-end;
-
-procedure TIocpSocketConnection._TriggerClientSentData(Buf: Pointer; Len: Integer);
-begin
-  Owner.FIoCachePool.FreeMemory(Buf);
-end;
-
 {$IFDEF __TIME_OUT_TIMER__}
 procedure TIocpSocketConnection.OnTimerCreate(Sender: TObject);
 begin
@@ -829,6 +822,31 @@ procedure TIocpSocketConnection.TriggerLifeout;
 begin
 end;
 {$ENDIF}
+
+procedure TIocpSocketConnection.TriggerConnected;
+begin
+  if Assigned(Owner.OnClientConnected) then
+    Owner.OnClientConnected(Owner, Self);
+end;
+
+procedure TIocpSocketConnection.TriggerDisconnected;
+begin
+  if Assigned(Owner.OnClientDisconnected) then
+    Owner.OnClientDisconnected(Owner, Self);
+end;
+
+procedure TIocpSocketConnection.TriggerRecvData(Buf: Pointer; Len: Integer);
+begin
+  if Assigned(Owner.OnClientRecvData) then
+    Owner.OnClientRecvData(Owner, Self, Buf, Len)
+end;
+
+procedure TIocpSocketConnection.TriggerSentData(Buf: Pointer; Len: Integer);
+begin
+  if Assigned(Owner.OnClientSentData) then
+    Owner.OnClientSentData(Owner, Self, Buf, Len);
+  Owner.FIoCachePool.FreeMemory(Buf);
+end;
 
 function TIocpSocketConnection.PostReadZero: Boolean;
 var
@@ -1834,7 +1852,7 @@ begin
       Exit;
     end;
 
-    if not _TriggerClientConnected(Connection) then Exit;
+    TriggerClientConnected(Connection);
 
     // 连接建立之后PostZero读取请求
     if not Connection.PostReadZero then Exit;
@@ -1865,7 +1883,7 @@ begin
 
       Connection.UpdateTick;
 
-      if not _TriggerClientConnected(Connection) then Exit;
+      TriggerClientConnected(Connection);
 
       // 连接建立之后PostZero读取请求
       if not Connection.PostReadZero then Exit;
@@ -1933,7 +1951,7 @@ begin
 
       try
         InterlockedIncrement(FPendingRequest);
-        if not _TriggerClientRecvData(Connection, PerIoData.Buffer.DataBuf.buf, PerIoData.Buffer.DataBuf.len) then Exit;
+        TriggerClientRecvData(Connection, PerIoData.Buffer.DataBuf.buf, PerIoData.Buffer.DataBuf.len);
       finally
         InterlockedDecrement(FPendingRequest);
       end;
@@ -1967,7 +1985,7 @@ begin
       Connection.UpdateTick;
 
       PerIoData.Buffer.DataBuf.Len := PerIoData.BytesTransfered;
-      _TriggerClientSentData(Connection, PerIoData.Buffer.DataBuf.Buf, PerIoData.Buffer.DataBuf.Len);
+      TriggerClientSentData(Connection, PerIoData.Buffer.DataBuf.Buf, PerIoData.Buffer.DataBuf.Len);
     finally
       Connection.Release; // 对应PostWrite中的AddRef
     end;
@@ -2114,66 +2132,30 @@ begin
     AppendLog(Format('getsockopt.SO_ERROR success, IocpHandle=%d, Socket=%d, OptVal=%d', [FIocpHandle, Socket, OptVal]), ltWarning);
 end;
 
-function TIocpTcpSocket.TriggerClientConnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TIocpTcpSocket.TriggerClientConnected(
+  Client: TIocpSocketConnection);
 begin
-  if Assigned(FOnClientConnected) then
-    Result := FOnClientConnected(Self, Client)
-  else
-    Result := True;
+  Client.TriggerConnected;
 end;
 
-function TIocpTcpSocket.TriggerClientDisconnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TIocpTcpSocket.TriggerClientDisconnected(
+  Client: TIocpSocketConnection);
 begin
-  if Assigned(FOnClientDisconnected) then
-    Result := FOnClientDisconnected(Self, Client)
-  else
-    Result := True;
+  Client.TriggerDisconnected;
 end;
 
-function TIocpTcpSocket.TriggerClientRecvData(
-  Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean;
-begin
-  if Assigned(FOnClientRecvData) then
-    Result := FOnClientRecvData(Self, Client, Buf, Len)
-  else
-    Result := True;
-end;
-
-function TIocpTcpSocket.TriggerClientSentData(
-  Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean;
-begin
-  if Assigned(FOnClientSentData) then
-    Result := FOnClientSentData(Self, Client, Buf, Len)
-  else
-    Result := True;
-end;
-
-function TIocpTcpSocket._TriggerClientConnected(Client: TIocpSocketConnection): Boolean;
-begin
-  Result := TriggerClientConnected(Client);
-end;
-
-function TIocpTcpSocket._TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean;
-begin
-  Result := TriggerClientDisconnected(Client);
-end;
-
-function TIocpTcpSocket._TriggerClientRecvData(Client: TIocpSocketConnection;
-  Buf: Pointer; Len: Integer): Boolean;
+procedure TIocpTcpSocket.TriggerClientRecvData(
+  Client: TIocpSocketConnection; Buf: Pointer; Len: Integer);
 begin
   TInterlocked.Add(FRecvBytes, Len);
-  Client._TriggerClientRecvData(Buf, Len);
-  Result := TriggerClientRecvData(Client, Buf, Len);
+  Client.TriggerRecvData(Buf, Len);
 end;
 
-function TIocpTcpSocket._TriggerClientSentData(Client: TIocpSocketConnection;
-  Buf: Pointer; Len: Integer): Boolean;
+procedure TIocpTcpSocket.TriggerClientSentData(
+  Client: TIocpSocketConnection; Buf: Pointer; Len: Integer);
 begin
   TInterlocked.Add(FSentBytes, Len);
-  Client._TriggerClientSentData(Buf, Len);
-  Result := TriggerClientSentData(Client, Buf, Len);
+  Client.TriggerSentData(Buf, Len);
 end;
 
 { TIocpLineSocketConnection }
@@ -2269,11 +2251,10 @@ begin
     FLineEndTag := #13#10;
 end;
 
-function TIocpLineSocket.TriggerClientRecvData(Client: TIocpSocketConnection;
-  Buf: Pointer; Len: Integer): Boolean;
+procedure TIocpLineSocket.TriggerClientRecvData(Client: TIocpSocketConnection;
+  Buf: Pointer; Len: Integer);
 begin
   ParseRecvData(TIocpLineSocketConnection(Client), Buf, Len);
-  Result := True;
 end;
 
 { TIocpLineServer }

@@ -15,9 +15,9 @@ const
 type
   TTestIocpClient = class(TIocpTcpSocket)
   protected
-    function TriggerClientConnected(Client: TIocpSocketConnection): Boolean; override;
-    function TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean; override;
-    function TriggerClientSentData(Client: TIocpSocketConnection; buf: Pointer; len: Integer): Boolean; override;
+    procedure TriggerClientConnected(Client: TIocpSocketConnection); override;
+    procedure TriggerClientDisconnected(Client: TIocpSocketConnection); override;
+    procedure TriggerClientSentData(Client: TIocpSocketConnection; buf: Pointer; len: Integer); override;
   end;
 
   TfmIocpClient = class(TForm)
@@ -105,7 +105,7 @@ begin
     Result := Format('%dT ', [Bytes div TBYTES]) + BytesToStr(Bytes mod TBYTES);
 end;
 
-function TTestIocpClient.TriggerClientConnected(Client: TIocpSocketConnection): Boolean;
+procedure TTestIocpClient.TriggerClientConnected(Client: TIocpSocketConnection);
 var
   Buf: array [0..TEST_PACK_SIZE - 1] of Byte;
   i: Integer;
@@ -115,17 +115,17 @@ begin
     Buf[i] := i mod 256;
   end;
 
-  Result := (Client.Send(@Buf[0], Length(Buf)) > 0);
+  Client.Send(@Buf[0], Length(Buf));
 end;
 
-function TTestIocpClient.TriggerClientDisconnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TTestIocpClient.TriggerClientDisconnected(
+  Client: TIocpSocketConnection);
 begin
-  Result := inherited TriggerClientDisconnected(Client);
+  inherited TriggerClientDisconnected(Client);
 end;
 
-function TTestIocpClient.TriggerClientSentData(Client: TIocpSocketConnection;
-  buf: Pointer; len: Integer): Boolean;
+procedure TTestIocpClient.TriggerClientSentData(Client: TIocpSocketConnection;
+  buf: Pointer; len: Integer);
 var
 {$ifdef __SND_FIXED_SIZE__}
   NewBuf: array [0..TEST_PACK_SIZE - 1] of Byte;
@@ -134,15 +134,14 @@ var
 {$endif}
   i: Integer;
 begin
-  Result := inherited TriggerClientSentData(Client, buf, len);
-  if not Result then Exit;
+  inherited TriggerClientSentData(Client, buf, len);
 
 {$ifdef __SND_FIXED_SIZE__}
   for i := 0 to TEST_PACK_SIZE - 1 do
   begin
     NewBuf[i] := i mod 256;
   end;
-  Result := (Client.Send(@NewBuf[0], TEST_PACK_SIZE) > 0);
+  Client.Send(@NewBuf[0], TEST_PACK_SIZE);
 {$else}
   len := Client.SndBufSize;
   GetMem(NewBuf, len);
