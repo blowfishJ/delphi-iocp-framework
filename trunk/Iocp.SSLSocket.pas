@@ -24,6 +24,7 @@ type
 
     procedure TriggerConnected; override;
     procedure TriggerRecvData(Buf: Pointer; Len: Integer); override;
+    procedure TriggerSentData(Buf: Pointer; Len: Integer); override;
   public
     constructor Create(AOwner: TObject); override;
     destructor Destroy; override;
@@ -180,31 +181,9 @@ begin
     end;
 
     SSLHandleshaking;
-{    // 是否需要处理握手数据
-    if (BIO_pending(FSendBIO) <> 0) then
-    begin
-      // 从 BIO 读取待发出的握手数据
-      bytes := BIO_read(FSendBIO, FSendSslBuffer, FBufSize);
-      if (bytes <= 0) then
-      begin
-        error := SSL_get_error(FSsl, bytes);
-        if ssl_is_fatal_error(error) then
-          Disconnect;
-        Exit;
-      end;
-
-      // 发出握手数据
-      inherited PostWrite(FSendSslBuffer, bytes);
-    end; }
   finally
     Unlock;
   end;
-
-{  if FSslHandshaking and SSL_is_init_finished(FSsl) then
-  begin
-    FSslHandshaking := False;
-    inherited TriggerConnected;
-  end;}
 end;
 
 procedure TIocpSSLConnection.TriggerRecvData(Buf: Pointer; Len: Integer);
@@ -250,29 +229,15 @@ begin
     end;
 
     SSLHandleshaking;
-{    // 是否需要处理握手数据
-    if (BIO_pending(FSendBIO) <> 0) then
-    begin
-      bytes := BIO_read(FSendBIO, FSendSslBuffer, FBufSize);
-      if (bytes <= 0) then
-      begin
-        error := SSL_get_error(FSsl, bytes);
-        if ssl_is_fatal_error(error) then
-          Disconnect;
-        Exit;
-      end;
-      inherited PostWrite(FSendSslBuffer, bytes);
-    end;
-
-    // 握手完成
-    if FSslHandshaking and SSL_is_init_finished(FSsl) then
-    begin
-      FSslHandshaking := False;
-      inherited TriggerConnected;
-    end; }
   finally
     Unlock;
   end;
+end;
+
+procedure TIocpSSLConnection.TriggerSentData(Buf: Pointer; Len: Integer);
+begin
+  if not FSslHandshaking then
+    inherited TriggerSentData(Buf, Len);
 end;
 
 { TIocpSSLSocket }

@@ -521,7 +521,8 @@ begin
   if not Result then Exit;
 
   _CloseSocket;
-  Owner.TriggerClientDisconnected(Self);
+  TriggerDisconnected;
+//  Owner.TriggerClientDisconnected(Self);
   Owner.FreeConnection(Self);
 end;
 
@@ -825,27 +826,22 @@ end;
 
 procedure TIocpSocketConnection.TriggerConnected;
 begin
-  if Assigned(Owner.OnClientConnected) then
-    Owner.OnClientConnected(Owner, Self);
+  Owner.TriggerClientConnected(Self);
 end;
 
 procedure TIocpSocketConnection.TriggerDisconnected;
 begin
-  if Assigned(Owner.OnClientDisconnected) then
-    Owner.OnClientDisconnected(Owner, Self);
+  Owner.TriggerClientDisconnected(Self);
 end;
 
 procedure TIocpSocketConnection.TriggerRecvData(Buf: Pointer; Len: Integer);
 begin
-  if Assigned(Owner.OnClientRecvData) then
-    Owner.OnClientRecvData(Owner, Self, Buf, Len)
+  Owner.TriggerClientRecvData(Self, Buf, Len);
 end;
 
 procedure TIocpSocketConnection.TriggerSentData(Buf: Pointer; Len: Integer);
 begin
-  if Assigned(Owner.OnClientSentData) then
-    Owner.OnClientSentData(Owner, Self, Buf, Len);
-  Owner.FIoCachePool.FreeMemory(Buf);
+  Owner.TriggerClientSentData(Self, Buf, Len);
 end;
 
 function TIocpSocketConnection.PostReadZero: Boolean;
@@ -1852,7 +1848,8 @@ begin
       Exit;
     end;
 
-    TriggerClientConnected(Connection);
+    Connection.TriggerConnected;
+//    TriggerClientConnected(Connection);
 
     // 连接建立之后PostZero读取请求
     if not Connection.PostReadZero then Exit;
@@ -1883,7 +1880,8 @@ begin
 
       Connection.UpdateTick;
 
-      TriggerClientConnected(Connection);
+      Connection.TriggerConnected;
+//      TriggerClientConnected(Connection);
 
       // 连接建立之后PostZero读取请求
       if not Connection.PostReadZero then Exit;
@@ -1947,11 +1945,13 @@ begin
       Connection.UpdateTick;
 
       // PerIoData.Buffer.DataBuf 就是已接收到的数据，PerIoData.BytesTransfered 是实际接收到的字节数
+      TInterlocked.Add(FRecvBytes, PerIoData.BytesTransfered);
       PerIoData.Buffer.DataBuf.Len := PerIoData.BytesTransfered;
 
       try
         InterlockedIncrement(FPendingRequest);
-        TriggerClientRecvData(Connection, PerIoData.Buffer.DataBuf.buf, PerIoData.Buffer.DataBuf.len);
+        Connection.TriggerRecvData(PerIoData.Buffer.DataBuf.buf, PerIoData.Buffer.DataBuf.len);
+        //TriggerClientRecvData(Connection, PerIoData.Buffer.DataBuf.buf, PerIoData.Buffer.DataBuf.len);
       finally
         InterlockedDecrement(FPendingRequest);
       end;
@@ -1984,8 +1984,10 @@ begin
 
       Connection.UpdateTick;
 
+      TInterlocked.Add(FSentBytes, PerIoData.BytesTransfered);
       PerIoData.Buffer.DataBuf.Len := PerIoData.BytesTransfered;
-      TriggerClientSentData(Connection, PerIoData.Buffer.DataBuf.Buf, PerIoData.Buffer.DataBuf.Len);
+      Connection.TriggerSentData(PerIoData.Buffer.DataBuf.Buf, PerIoData.Buffer.DataBuf.Len);
+      FIoCachePool.FreeMemory(PerIoData.Buffer.DataBuf.Buf);
     finally
       Connection.Release; // 对应PostWrite中的AddRef
     end;
@@ -2107,6 +2109,8 @@ begin
   FIdleConnectionList.Clear;
   FConnectionPool.Clear;
   FPerIoDataPool.Clear;
+  FIoCachePool.Clear;
+  FFileCachePool.Clear;
 
 //  AppendLog('%s.shutdown compelte, ConnCount=%d, IdleConnCount=%d',
 //    [ClassName, FConnectionList.Count, FIdleConnectionList.Count]);
@@ -2135,27 +2139,29 @@ end;
 procedure TIocpTcpSocket.TriggerClientConnected(
   Client: TIocpSocketConnection);
 begin
-  Client.TriggerConnected;
+  if Assigned(OnClientConnected) then
+    OnClientConnected(Self, Client);
 end;
 
 procedure TIocpTcpSocket.TriggerClientDisconnected(
   Client: TIocpSocketConnection);
 begin
-  Client.TriggerDisconnected;
+  if Assigned(OnClientDisconnected) then
+    OnClientDisconnected(Self, Client);
 end;
 
 procedure TIocpTcpSocket.TriggerClientRecvData(
   Client: TIocpSocketConnection; Buf: Pointer; Len: Integer);
 begin
-  TInterlocked.Add(FRecvBytes, Len);
-  Client.TriggerRecvData(Buf, Len);
+  if Assigned(OnClientRecvData) then
+    OnClientRecvData(Self, Client, Buf, Len)
 end;
 
 procedure TIocpTcpSocket.TriggerClientSentData(
   Client: TIocpSocketConnection; Buf: Pointer; Len: Integer);
 begin
-  TInterlocked.Add(FSentBytes, Len);
-  Client.TriggerSentData(Buf, Len);
+  if Assigned(OnClientSentData) then
+    OnClientSentData(Self, Client, Buf, Len);
 end;
 
 { TIocpLineSocketConnection }
