@@ -33,6 +33,12 @@
         <Projects Include="IocpDatasnapServer\IocpDsGUI.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="SslServer\SslServer.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="SslClient\SslClient.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -131,14 +137,32 @@
     <Target Name="IocpDsGUI:Make">
         <MSBuild Projects="IocpDatasnapServer\IocpDsGUI.dproj" Targets="Make"/>
     </Target>
+    <Target Name="SslServer">
+        <MSBuild Projects="SslServer\SslServer.dproj"/>
+    </Target>
+    <Target Name="SslServer:Clean">
+        <MSBuild Projects="SslServer\SslServer.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="SslServer:Make">
+        <MSBuild Projects="SslServer\SslServer.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="SslClient">
+        <MSBuild Projects="SslClient\SslClient.dproj"/>
+    </Target>
+    <Target Name="SslClient:Clean">
+        <MSBuild Projects="SslClient\SslClient.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="SslClient:Make">
+        <MSBuild Projects="SslClient\SslClient.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="IocpServer;IocpClient;HttpServer;HttpTunnel;IocpHttpTunnelSvc;IocpPacketServer;IocpPacketClient;IocpVariantClient;IocpVariantServer;IocpDsGUI"/>
+        <CallTarget Targets="IocpServer;IocpClient;HttpServer;HttpTunnel;IocpHttpTunnelSvc;IocpPacketServer;IocpPacketClient;IocpVariantClient;IocpVariantServer;IocpDsGUI;SslServer;SslClient"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="IocpServer:Clean;IocpClient:Clean;HttpServer:Clean;HttpTunnel:Clean;IocpHttpTunnelSvc:Clean;IocpPacketServer:Clean;IocpPacketClient:Clean;IocpVariantClient:Clean;IocpVariantServer:Clean;IocpDsGUI:Clean"/>
+        <CallTarget Targets="IocpServer:Clean;IocpClient:Clean;HttpServer:Clean;HttpTunnel:Clean;IocpHttpTunnelSvc:Clean;IocpPacketServer:Clean;IocpPacketClient:Clean;IocpVariantClient:Clean;IocpVariantServer:Clean;IocpDsGUI:Clean;SslServer:Clean;SslClient:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="IocpServer:Make;IocpClient:Make;HttpServer:Make;HttpTunnel:Make;IocpHttpTunnelSvc:Make;IocpPacketServer:Make;IocpPacketClient:Make;IocpVariantClient:Make;IocpVariantServer:Make;IocpDsGUI:Make"/>
+        <CallTarget Targets="IocpServer:Make;IocpClient:Make;HttpServer:Make;HttpTunnel:Make;IocpHttpTunnelSvc:Make;IocpPacketServer:Make;IocpPacketClient:Make;IocpVariantClient:Make;IocpVariantServer:Make;IocpDsGUI:Make;SslServer:Make;SslClient:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

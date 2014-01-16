@@ -376,7 +376,11 @@ procedure LoadSsleay;
 begin
   if (_SsleayHandle <> 0) then Exit;
   _SsleayHandle := LoadLib(SSLEAY_DLL);
-  if (_SsleayHandle = 0) then Exit;
+  if (_SsleayHandle = 0) then
+  begin
+    raise Exception.CreateFmt('Load %s failed', [SSLEAY_DLL]);
+    Exit;
+  end;
 
   SSL_library_init         := GetSslProc('SSL_library_init');
   SSL_load_error_strings   := GetSslProc('SSL_load_error_strings');
@@ -419,7 +423,11 @@ procedure LoadLibeay;
 begin
   if (_LibeayHandle <> 0) then Exit;
   _LibeayHandle := LoadLib(LIBEAY_DLL);
-  if (_LibeayHandle = 0) then Exit;
+  if (_LibeayHandle = 0) then
+  begin
+    raise Exception.CreateFmt('Load %s failed', [LIBEAY_DLL]);
+    Exit;
+  end;
 
   CRYPTO_num_locks                    := GetEayProc('CRYPTO_num_locks');
   CRYPTO_set_locking_callback         := GetEayProc('CRYPTO_set_locking_callback');
@@ -548,12 +556,16 @@ end;
 
 class function TSSLTools.NewCTX: PSSL_CTX;
 begin
+  if not Assigned(SSL_CTX_new) then Exit(nil);
+
   Result := SSL_CTX_new(SSLv23_method());
   SSL_CTX_set_verify(Result, SSL_VERIFY_NONE, nil);
 end;
 
 class procedure TSSLTools.FreeCTX(var ctx: PSSL_CTX);
 begin
+  if not Assigned(SSL_CTX_free) then Exit;
+
   SSL_CTX_free(ctx);
   ctx := nil;
 end;
@@ -562,8 +574,8 @@ class procedure TSSLTools.LoadSSL;
 begin
   if (TInterlocked.Increment(FRef) = 1) then
   begin
-    LoadSsleay;
     LoadLibeay;
+    LoadSsleay;
     SslInit;
   end;
 end;
