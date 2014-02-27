@@ -17,7 +17,7 @@ uses
   Datasnap.DSCommonServer, Data.DBXTransportFilter,
   Datasnap.DSTransport, Data.DBXCommon, Data.DBXClientResStrs, Data.DBXMessageHandlerCommon,
   Datasnap.DSSession, Data.DBXMessageHandlerJSonServer,
-  System.SysUtils, System.Math, Iocp.TcpSocket;
+  System.SysUtils, System.Math, Iocp.TcpSocket, Iocp.SimpleServer;
 
 type
   TIocpDataSnapTransport = class;
@@ -39,9 +39,9 @@ type
   private
     FTransport: TIocpDataSnapTransport;
   protected
-    function TriggerClientConnected(Client: TIocpSocketConnection): Boolean; override;
-    function TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean; override;
-    function TriggerClientDisconnected(Client: TIocpSocketConnection): Boolean; override;
+    procedure TriggerClientConnected(Client: TIocpSocketConnection); override;
+    procedure TriggerClientRecvData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer); override;
+    procedure TriggerClientDisconnected(Client: TIocpSocketConnection); override;
   public
     constructor Create(Transport: TIocpDataSnapTransport); overload;
   published
@@ -210,8 +210,8 @@ begin
   FTransport := Transport;
 end;
 
-function TIocpDatasnapServer.TriggerClientConnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TIocpDatasnapServer.TriggerClientConnected(
+  Client: TIocpSocketConnection);
 var
   LDBXChannel: TIocpDBXChannel;
   LFilterChannel: TDBXFilterSocketChannel;
@@ -246,24 +246,21 @@ begin
     Assert(TDSSessionManager.GetThreadSession <> nil);
     TDSSessionManager.GetThreadSession.ObjectCreator := Self;
   end;
-
-  Result := True;
 end;
 
-function TIocpDatasnapServer.TriggerClientDisconnected(
-  Client: TIocpSocketConnection): Boolean;
+procedure TIocpDatasnapServer.TriggerClientDisconnected(
+  Client: TIocpSocketConnection);
 begin
   with TIocpDatasnapConnection(Client) do
   begin
     TDSSessionManager.ClearThreadSession;
     if Assigned(FProtocolHandler) then
       FreeAndNil(FProtocolHandler);
-    Result := True;
   end;
 end;
 
-function TIocpDatasnapServer.TriggerClientRecvData(
-  Client: TIocpSocketConnection; Buf: Pointer; Len: Integer): Boolean;
+procedure TIocpDatasnapServer.TriggerClientRecvData(
+  Client: TIocpSocketConnection; Buf: Pointer; Len: Integer);
 begin
   with TIocpDatasnapConnection(Client) do
   begin
@@ -292,7 +289,6 @@ begin
       end;
     end;
   end;
-  Result := True;
 end;
 
 { TIocpDatasnapConnection }
