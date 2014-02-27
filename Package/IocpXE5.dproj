@@ -1,7 +1,7 @@
 ﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{91CC17DF-C5B6-4B58-BF78-D8B9ACA1FDBD}</ProjectGuid>
-        <MainSource>IocpXE4.dpk</MainSource>
+        <MainSource>IocpXE5.dpk</MainSource>
         <ProjectVersion>15.1</ProjectVersion>
         <FrameworkType>None</FrameworkType>
         <Base>True</Base>
@@ -167,7 +167,7 @@
                     <VersionInfoKeys Name="Comments"/>
                 </VersionInfoKeys>
                 <Source>
-                    <Source Name="MainSource">IocpXE4.dpk</Source>
+                    <Source Name="MainSource">IocpXE5.dpk</Source>
                 </Source>
             </Delphi.Personality>
             <Deployment/>
