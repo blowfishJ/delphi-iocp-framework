@@ -12,7 +12,6 @@ type
   private
     FFastTest: Boolean;
   protected
-    procedure DoOnRequest(Client: TIocpHttpConnection); override;
   public
     property FastTest: Boolean read FFastTest write FFastTest;
   end;
@@ -168,6 +167,16 @@ begin
   Caption := Caption + ' (x86)';
   {$endif}
   FServer := TTestIocpHttpServer.Create(nil);
+  FServer.RegisterHandler('GET', '/test',
+    procedure(Connection: TIocpHttpConnection)
+    begin
+      Connection.AnswerHTML('', '', '', 'haha');
+    end);
+  FServer.RegisterHandler('*', '/abc',
+    procedure(Connection: TIocpHttpConnection)
+    begin
+      Connection.AnswerHTML('', '', '', 'wtf');
+    end);
 end;
 
 procedure TfmIocpHttpServer.FormDestroy(Sender: TObject);
@@ -213,17 +222,6 @@ begin
   FLastSentBytes := FServer.SentBytes;
   FLastRecvBytes := FServer.RecvBytes;
   FLastTick := GetTickCount;
-end;
-
-{ TTestIocpHttpServer }
-
-procedure TTestIocpHttpServer.DoOnRequest(Client: TIocpHttpConnection);
-begin
-  if FFastTest then
-    Client.AnswerHTML('', 'text/plain', '', RawByteString('Hello World'))
-  else
-    inherited DoOnRequest(Client);
-//  fmIocpHttpServer.AddLog(Client.Method + ' ' + Client.PathAndParams);
 end;
 
 end.
