@@ -362,6 +362,7 @@ object fmIocpHttpServer: TfmIocpHttpServer
     end
   end
   object Timer1: TTimer
+    Enabled = False
     OnTimer = Timer1Timer
     Left = 312
     Top = 200

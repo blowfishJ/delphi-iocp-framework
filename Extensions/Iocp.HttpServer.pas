@@ -2,8 +2,6 @@ unit Iocp.HttpServer;
 
 {$i Iocp.Ext.inc}
 
-{$define __LOGIC_THREAD_POOL__}
-
 interface
 
 uses
@@ -205,7 +203,7 @@ type
   private type
     TIocpHttpHandlers = TList<TIocpHttpHandler>;
   private
-    {$ifdef __LOGIC_THREAD_POOL__}
+    {$ifdef __IOCP_HTTP_SERVER_LOGIC_THREAD_POOL__}
     FJobThreadPool: TIocpThreadPool;
     {$endif}
     FRootDir: string;
@@ -219,7 +217,7 @@ type
     function GetRootDir: string;
     function HandlerIndex(const Method, URI: string): Integer;
   protected
-    {$ifdef __LOGIC_THREAD_POOL__}
+    {$ifdef __IOCP_HTTP_SERVER_LOGIC_THREAD_POOL__}
     procedure StartupWorkers; override;
     procedure ShutdownWorkers; override;
     {$endif}
@@ -727,13 +725,13 @@ end;
 
 constructor TIocpHttpServer.Create(AOwner: TComponent);
 begin
+  FHandlers := TIocpHttpHandlers.Create;
+  FHandlersLock := TCriticalSection.Create;
+
   inherited Create(AOwner);
 
   InitAcceptNum := IOCP_HTTP_INIT_ACCEPT_NUM;
   ConnectionClass := TIocpHttpConnection;
-
-  FHandlers := TIocpHttpHandlers.Create;
-  FHandlersLock := TCriticalSection.Create;
 
   {$ifdef __IOCP_SSL__}
   SetCert(PAnsiChar(SSL_SERVER_CERT), Length(SSL_SERVER_CERT),
@@ -935,7 +933,7 @@ begin
   // 在解析完请求数据之后再调用线程池
   if (Client.FHttpState = hcDone) then
   begin
-    {$ifdef __LOGIC_THREAD_POOL__}
+    {$ifdef __IOCP_HTTP_SERVER_LOGIC_THREAD_POOL__}
     if (Client.AddRef = 1) then Exit;
     FJobThreadPool.AddRequest(TIocpHttpRequest.Create(Client));
     {$else}
@@ -1002,7 +1000,7 @@ begin
   FHandlersLock.Leave;
 end;
 
-{$ifdef __LOGIC_THREAD_POOL__}
+{$ifdef __IOCP_HTTP_SERVER_LOGIC_THREAD_POOL__}
 procedure TIocpHttpServer.StartupWorkers;
 begin
   if not Assigned(FJobThreadPool) then

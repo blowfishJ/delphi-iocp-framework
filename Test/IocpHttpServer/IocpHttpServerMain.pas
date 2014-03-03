@@ -177,6 +177,8 @@ begin
     begin
       Connection.AnswerHTML('', '', '', 'wtf');
     end);
+
+  Timer1.Enabled := True;
 end;
 
 procedure TfmIocpHttpServer.FormDestroy(Sender: TObject);
