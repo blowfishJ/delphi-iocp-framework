@@ -1,6 +1,6 @@
 unit Iocp.PacketSocket;
 
-{$define __LOGIC_THREAD_POOL__}
+//{$define __LOGIC_THREAD_POOL__}
 
 interface
 
@@ -312,6 +312,7 @@ begin
         if FCrcEnabled and not CheckDataCrc(FRecvPacket^) then
         begin
           TriggerPacketDataCrcError(TIocpPacketConnection(Client), FRecvPacket^);
+          FreeMem(FRecvPacket.Data);
           Dispose(FRecvPacket);
           Client.Disconnect;
           Exit;
@@ -321,6 +322,7 @@ begin
         {$ifdef __LOGIC_THREAD_POOL__}
         if (Client.AddRef = 1) then
         begin
+          FreeMem(FRecvPacket.Data);
           Dispose(FRecvPacket);
           Exit;
         end;
