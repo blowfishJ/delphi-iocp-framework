@@ -1,6 +1,6 @@
 unit Iocp.PacketSocket;
 
-//{$define __LOGIC_THREAD_POOL__}
+{$define __LOGIC_THREAD_POOL__}
 
 interface
 
