@@ -18,7 +18,7 @@ type
     FActive: Boolean;
     procedure SetActive(const Value: Boolean);
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); override;
     destructor Destroy; override;
 
     function Start: Boolean;
@@ -43,9 +43,10 @@ end;
 
 { TSimpleIocpTcpServer }
 
-constructor TSimpleIocpTcpServer.Create(AOwner: TComponent);
+constructor TSimpleIocpTcpServer.Create(AOwner: TComponent;
+  IoThreadsNumber: Integer);
 begin
-  inherited Create(AOwner);
+  inherited Create(AOwner, IoThreadsNumber);
   FListened := False;
 
   FAddr := '';

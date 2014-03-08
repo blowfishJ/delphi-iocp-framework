@@ -1,6 +1,6 @@
 unit Iocp.PacketSocket;
 
-{$define __LOGIC_THREAD_POOL__}
+//{$define __LOGIC_THREAD_POOL__}
 
 interface
 
@@ -74,7 +74,7 @@ type
     procedure TriggerPacketHeaderCrcError(Client: TIocpPacketConnection; const Packet: TIocpPacket); virtual;
     procedure TriggerPacketDataCrcError(Client: TIocpPacketConnection; const Packet: TIocpPacket); virtual;
   public
-    constructor Create(AOwner: TComponent); overload; override;
+    constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); override;
   published
     property CrcEnabled: Boolean read FCrcEnabled write FCrcEnabled default True;
     property OnPacketRecv: TIocpPacketEvent read FOnPacketRecv write FOnPacketRecv;
@@ -90,7 +90,7 @@ type
     FInitAcceptNum: Integer;
     FStartTick: DWORD;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); override;
     destructor Destroy; override;
 
     function Start: Boolean;
@@ -218,9 +218,10 @@ end;
 
 { TIocpPacketSocket }
 
-constructor TIocpPacketSocket.Create(AOwner: TComponent);
+constructor TIocpPacketSocket.Create(AOwner: TComponent;
+  IoThreadsNumber: Integer);
 begin
-  inherited Create(AOwner);
+  inherited Create(AOwner, IoThreadsNumber);
 
   ConnectionClass := TIocpPacketConnection;
   FCrcEnabled := True;
@@ -373,9 +374,10 @@ end;
 
 { TIocpPacketServer }
 
-constructor TIocpPacketServer.Create(AOwner: TComponent);
+constructor TIocpPacketServer.Create(AOwner: TComponent;
+  IoThreadsNumber: Integer);
 begin
-  inherited Create(AOwner);
+  inherited Create(AOwner, IoThreadsNumber);
   FListened := False;
 
   FAddr := '';
