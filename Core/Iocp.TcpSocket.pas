@@ -352,7 +352,7 @@ type
     procedure TriggerClientSentData(Client: TIocpSocketConnection; Buf: Pointer; Len: Integer); virtual;
   public
     constructor Create(AOwner: TComponent); overload; override;
-    constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); reintroduce; overload;
+    constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); reintroduce; overload; virtual;
     destructor Destroy; override;
 
     // Host设置为''时，如果系统支持IPv6则会同时监听IPv4及IPv6
@@ -425,7 +425,7 @@ type
     // 重载这个方法，在里面处理接收到的文本行
     procedure DoOnRecvLine(Client: TIocpLineSocketConnection; Line: RawByteString); virtual;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); override;
 
     function Connect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer = nil; ConnectTimeout: DWORD = 10000): TIocpLineSocketConnection;
   published
@@ -440,7 +440,7 @@ type
     FPort: Word;
     FListened: Boolean;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); override;
 
     function Start: Boolean;
     function Stop: Boolean;
@@ -2169,9 +2169,10 @@ begin
   Result := TIocpLineSocketConnection(inherited Connect(RemoteAddr, RemotePort, Tag, ConnectTimeout));
 end;
 
-constructor TIocpLineSocket.Create(AOwner: TComponent);
+constructor TIocpLineSocket.Create(AOwner: TComponent;
+  IoThreadsNumber: Integer);
 begin
-  inherited Create(AOwner);
+  inherited Create(AOwner, IoThreadsNumber);
 
   ConnectionClass := TIocpLineSocketConnection;
   FLineEndTag := #13#10;
@@ -2241,9 +2242,10 @@ end;
 
 { TIocpLineServer }
 
-constructor TIocpLineServer.Create(AOwner: TComponent);
+constructor TIocpLineServer.Create(AOwner: TComponent;
+  IoThreadsNumber: Integer);
 begin
-  inherited Create(AOwner);
+  inherited Create(AOwner, IoThreadsNumber);
 
   FListened := False;
 end;

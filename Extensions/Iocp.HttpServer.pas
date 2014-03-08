@@ -230,7 +230,7 @@ type
     // DoOnRequest 将会在线程池中被调用，可以在这个函数里处理用户自定义的回执数据
     procedure DoOnRequest(Client: TIocpHttpConnection); virtual;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent; IoThreadsNumber: Integer); override;
     destructor Destroy; override;
 
     ///	<summary>
@@ -723,12 +723,13 @@ end;
 
 { TIocpHttpServer }
 
-constructor TIocpHttpServer.Create(AOwner: TComponent);
+constructor TIocpHttpServer.Create(AOwner: TComponent;
+  IoThreadsNumber: Integer);
 begin
   FHandlers := TIocpHttpHandlers.Create;
   FHandlersLock := TCriticalSection.Create;
 
-  inherited Create(AOwner);
+  inherited Create(AOwner, IoThreadsNumber);
 
   InitAcceptNum := IOCP_HTTP_INIT_ACCEPT_NUM;
   ConnectionClass := TIocpHttpConnection;
