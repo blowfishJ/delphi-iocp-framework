@@ -169,11 +169,11 @@ type
 
     // ¥ø“Ï≤Ω∑¢ÀÕ
     function Send(Buf: Pointer; Size: Integer): Integer; overload; virtual;
-    function Send(const Buf; Size: Integer): Integer; overload;
-    function Send(const Bytes: TBytes): Integer; overload;
-    function Send(const s: RawByteString): Integer; overload;
-    function Send(const s: string): Integer; overload;
     function Send(Stream: TStream): Integer; overload; virtual;
+    function Send(const Buf; Size: Integer): Integer; overload; inline;
+    function Send(const Bytes: TBytes): Integer; overload; inline;
+    function Send(const s: RawByteString): Integer; overload; inline;
+    function Send(const s: string): Integer; overload; inline;
 
     property Owner: TIocpTcpSocket read GetOwner;
     property Socket: TSocket read FSocket;
