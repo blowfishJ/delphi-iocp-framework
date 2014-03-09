@@ -101,6 +101,7 @@ type
     FSocket: TSocket;
     FRemoteIP: string;
     FRemotePort: Word;
+    FConnected: Boolean;
 
     FRefCount: Integer;
     FDisconnected: Integer;
@@ -280,7 +281,7 @@ type
   }
   TIocpTcpSocket = class(TComponent)
   private
-    FShutdown: Boolean;
+    FShutdown: Integer;
     FIocpHandle: THandle;
     FIoThreadsNumber: Integer;
     FIoThreads: array of TIocpIoThread;
@@ -322,6 +323,7 @@ type
     function AssociateSocketWithCompletionPort(Socket: TSocket; Connection: TIocpSocketConnection): Boolean;
     function PostNewAcceptEx(ListenSocket: TSocket; AiFamily: Integer): Boolean;
     procedure TrackSocketStatus(Socket: TSocket);
+    function IsShutdown: Boolean;
 
     procedure RequestAcceptComplete(PerIoData: PIocpPerIoData);
     procedure RequestConnectComplete(Connection: TIocpSocketConnection);
@@ -497,8 +499,8 @@ begin
   if not Result then Exit;
 
   _CloseSocket;
+  FConnected := False;
   TriggerDisconnected;
-//  Owner.TriggerClientDisconnected(Self);
   Owner.FreeConnection(Self);
 end;
 
@@ -802,6 +804,7 @@ end;
 
 procedure TIocpSocketConnection.TriggerConnected;
 begin
+  FConnected := True;
   Owner.TriggerClientConnected(Self);
 end;
 
@@ -1407,6 +1410,8 @@ var
   LastErr: Integer;
 begin
   Result := INVALID_SOCKET;
+  if IsShutdown then Exit;
+
   // 超过最大允许连接数
   if (FMaxClients > 0) and (FConnectionList.Count >= FMaxClients) then Exit;
 
@@ -1471,6 +1476,16 @@ begin
 
     Connection.FIsIPv6 := (POutAddrInfo.ai_family = AF_INET6);
     ExtractAddrInfo(POutAddrInfo.ai_addr, POutAddrInfo.ai_addrlen, Connection.FRemoteIP, Connection.FRemotePort);
+
+    // 将连接放到空闲连接列表中
+    // 在ShutdownWorks中才能完整释放Socket资源，否则会造成Socket句柄泄露
+    try
+      FConnectionListLocker.Enter;
+      FIdleConnectionList[ClientSocket] := Connection;
+    finally
+      FConnectionListLocker.Leave;
+    end;
+
     PerIoData := AllocIoData(ClientSocket, iotConnect);
     if not ConnectEx(ClientSocket, POutAddrInfo.ai_addr, POutAddrInfo.ai_addrlen, nil, 0, PCardinal(0)^, PWSAOverlapped(PerIoData)) and
       (WSAGetLastError <> WSA_IO_PENDING) then
@@ -1584,6 +1599,11 @@ begin
   Result := FPerIoDataPool.UsedBlocksSize;
 end;
 
+function TIocpTcpSocket.IsShutdown: Boolean;
+begin
+  Result := (TInterlocked.Exchange(FShutdown, FShutdown) = 1);
+end;
+
 function TIocpTcpSocket.Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Boolean;
 const
   IPV6_V6ONLY = 27;
@@ -1596,7 +1616,7 @@ var
   LastErr: Integer;
 begin
   Result := False;
-  if not Assigned(FAcceptThread) then Exit;  
+  if IsShutdown or not Assigned(FAcceptThread) then Exit;
 
   try
     // 如果传递了一个有效地址则监听该地址
@@ -1749,7 +1769,7 @@ var
   LocalAddrLen, RemoteAddrLen: Integer;
   PLocalAddr, PRemoteAddr: PSockAddr;
 begin
-  if FShutdown then Exit;
+  if IsShutdown then Exit;
   
   try
     // 将连接放到工作连接列表中
@@ -1825,7 +1845,6 @@ begin
     end;
 
     Connection.TriggerConnected;
-//    TriggerClientConnected(Connection);
 
     // 连接建立之后PostZero读取请求
     if not Connection.PostReadZero then Exit;
@@ -1837,27 +1856,26 @@ end;
 
 procedure TIocpTcpSocket.RequestConnectComplete(Connection: TIocpSocketConnection);
 begin
-  if FShutdown then Exit;
+  if IsShutdown then Exit;
 
   try
     try
+      try
+        FConnectionListLocker.Enter;
+        FIdleConnectionList.Delete(Connection.FSocket);
+        FConnectionList[Connection.FSocket] := Connection;
+      finally
+        FConnectionListLocker.Leave;
+      end;
+
       if not Connection.InitSocket then
       begin
         Connection.Disconnect;
         Exit;
       end;
 
-      try
-        FConnectionListLocker.Enter;
-        FConnectionList[Connection.FSocket] := Connection;
-      finally
-        FConnectionListLocker.Leave;
-      end;
-
       Connection.UpdateTick;
-
       Connection.TriggerConnected;
-//      TriggerClientConnected(Connection);
 
       // 连接建立之后PostZero读取请求
       if not Connection.PostReadZero then Exit;
@@ -2008,17 +2026,17 @@ begin
     FIoThreadHandles[i] := FIoThreads[i].Handle;
   end;
 
-  // 创建监听线程
-  FAcceptThread := TIocpAcceptThread.Create(Self);
-
   {$IFDEF __TIME_OUT_TIMER__}
   // 创建时钟队列
   FTimerQueue := TIocpTimerQueue.Create;
   {$ENDIF}
 
+  // 创建监听线程
+  FAcceptThread := TIocpAcceptThread.Create(Self);
+
   FSentBytes := 0;
   FRecvBytes := 0;
-  FShutdown := False;
+  TInterlocked.Exchange(FShutdown, 0);
 end;
 
 procedure TIocpTcpSocket.ShutdownWorkers;
@@ -2026,8 +2044,16 @@ var
   i: Integer;
   LTick, LTimeout: LongWord;
 begin
-  FShutdown := True;
+  TInterlocked.Exchange(FShutdown, 1);
   if (FIocpHandle = 0) then Exit;
+
+  // 关闭监听线程
+  if Assigned(FAcceptThread) then
+  begin
+    FAcceptThread.Quit;
+    FAcceptThread.WaitFor;
+    FreeAndNil(FAcceptThread);
+  end;
 
   // 断开所有连接
   DisconnectAll;
@@ -2051,14 +2077,6 @@ begin
   begin
     SleepEx(10, True);
     if (CalcTickDiff(LTick, GetTickCount) > LTimeout) then Break;
-  end;
-
-  // 关闭监听线程
-  if Assigned(FAcceptThread) then
-  begin
-    FAcceptThread.Quit;
-    FAcceptThread.WaitFor;
-    FreeAndNil(FAcceptThread);
   end;
 
   // 关闭IO线程
