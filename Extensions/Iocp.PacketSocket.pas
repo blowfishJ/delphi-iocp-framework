@@ -5,9 +5,11 @@ unit Iocp.PacketSocket;
 interface
 
 uses
-  Windows, Classes, SysUtils, Math, Iocp.Winsock2, Iocp.TcpSocket, Iocp.ThreadPool, Iocp.Logger;
+  Windows, Classes, SysUtils, Math, Iocp.Winsock2, Iocp.TcpSocket,
+  Iocp.ThreadPool, Iocp.Logger, Crypt.FastCRC32;
 
 type
+  PIocpHeader = ^TIocpHeader;
   TIocpHeader = record
     HeaderCrc32, DataCrc32: LongWord;
     Tick: LongWord;
@@ -28,10 +30,11 @@ type
     function CalcCrc32(const Buf; const BufSize: Integer): LongWord; overload;
     function CalcCrc32(Stream: TStream): LongWord; overload;
     function CalcHeaderCrc(const Header: TIocpHeader): LongWord;
-    function MakeHeader(Buf: Pointer; Len: Integer): TIocpHeader; overload;
+    function MakeHeader(Buf: Pointer; Len: Integer; Dest: Pointer): Boolean; overload;
     function MakeHeader(Stream: TStream): TIocpHeader; overload;
     function CheckHeaderCrc(const Header: TIocpHeader): Boolean;
     function CheckDataCrc(const Packet: TIocpPacket): Boolean;
+    function PackData(Buf: Pointer; Len: Integer): TBytes;
   protected
     procedure Initialize; override;
   public
@@ -120,27 +123,27 @@ begin
 end;
 
 function TIocpPacketConnection.CalcCrc32(const Buf; const BufSize: Integer): LongWord;
-var
-  I: Integer;
-  P: PByte;
 begin
-  Result := 0;
-  P := @Buf;
-  for I := 1 to BufSize do
-  begin
-    Inc(Result, P^);
-    Inc(P);
-  end;
+  Result := Crypt.FastCRC32.CRC32(@Buf, BufSize);
 end;
 
 function TIocpPacketConnection.CalcCrc32(Stream: TStream): LongWord;
+const
+  BUF_SIZE = 8 * 1024;
 var
-  B: Byte;
+  LBuf: TBytes;
+  N: Integer;
 begin
-  Result := 0;
+  Result := $FFFFFFFF;
+  SetLength(LBuf, BUF_SIZE);
   Stream.Position := 0;
-  while (Stream.Read(B, SizeOf(Byte)) > 0) do
-    Inc(Result, B)
+  while True do
+  begin
+    N := Stream.ReadData(LBuf, BUF_SIZE);
+    if (N <= 0) then Break;
+    Result := Crypt.FastCRC32.ShaCrcRefresh(Result, Pointer(LBuf), N);
+  end;
+  Result := not Result;
 end;
 
 function TIocpPacketConnection.CalcHeaderCrc(const Header: TIocpHeader): LongWord;
@@ -148,20 +151,24 @@ begin
   Result := CalcCrc32((PAnsiChar(@Header) + SizeOf(Header.HeaderCrc32))^, SizeOf(Header) - SizeOf(Header.HeaderCrc32));
 end;
 
+function TIocpPacketConnection.MakeHeader(Buf: Pointer; Len: Integer;
+  Dest: Pointer): Boolean;
+begin
+  if (Buf = nil) or (Len <= 0) then Exit(False);
+
+  PIocpHeader(Dest).DataCrc32 := CalcCrc32(Buf^, Len);
+  PIocpHeader(Dest).Tick := GetTickCount;
+  PIocpHeader(Dest).DataSize := Len;
+  PIocpHeader(Dest).HeaderCrc32 := CalcHeaderCrc(PIocpHeader(Dest)^);
+
+  Result := True;
+end;
+
 function TIocpPacketConnection.MakeHeader(Stream: TStream): TIocpHeader;
 begin
   Result.DataCrc32 := CalcCrc32(Stream);
   Result.Tick := GetTickCount;
   Result.DataSize := Stream.Size;
-  Result.HeaderCrc32 := CalcHeaderCrc(Result);
-end;
-
-function TIocpPacketConnection.MakeHeader(Buf: Pointer;
-  Len: Integer): TIocpHeader;
-begin
-  Result.DataCrc32 := CalcCrc32(Buf^, Len);
-  Result.Tick := GetTickCount;
-  Result.DataSize := Len;
   Result.HeaderCrc32 := CalcHeaderCrc(Result);
 end;
 
@@ -175,14 +182,19 @@ begin
   Result := (CalcCrc32(Packet.Data^, Packet.Header.DataSize) = Packet.Header.DataCrc32);
 end;
 
+function TIocpPacketConnection.PackData(Buf: Pointer; Len: Integer): TBytes;
+begin
+  SetLength(Result, SizeOf(TIocpHeader) + Len);
+  if not MakeHeader(Buf, Len, Pointer(Result)) then Exit;
+  Move(Buf^, Result[SizeOf(TIocpHeader)], Len);
+end;
+
 function TIocpPacketConnection.Send(Buf: Pointer; Size: Integer): Integer;
 var
-  Header: TIocpHeader;
+  LPacketData: TBytes;
 begin
-  Header := MakeHeader(Buf, Size);
-  if (inherited Send(@Header, SizeOf(Header)) < 0) then Exit(-1);
-  if (inherited Send(Buf, Size) < 0) then Exit(-2);
-
+  LPacketData := PackData(Buf, Size);
+  if (inherited Send(Pointer(LPacketData), Length(LPacketData)) < 0) then Exit(-1);
   Result := Size;
 end;
 
