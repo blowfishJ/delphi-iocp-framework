@@ -6,7 +6,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, Math, Iocp.Winsock2, Iocp.TcpSocket,
-  Iocp.ThreadPool, Iocp.Logger, Crypt.FastCRC32;
+  Iocp.ThreadPool, Iocp.Logger, System.ZLib;
 
 type
   PIocpHeader = ^TIocpHeader;
@@ -124,7 +124,8 @@ end;
 
 function TIocpPacketConnection.CalcCrc32(const Buf; const BufSize: Integer): LongWord;
 begin
-  Result := Crypt.FastCRC32.CRC32(@Buf, BufSize);
+  Result := System.ZLib.crc32($FFFFFFFF, @Buf, BufSize);
+  Result := not Result;
 end;
 
 function TIocpPacketConnection.CalcCrc32(Stream: TStream): LongWord;
@@ -141,7 +142,7 @@ begin
   begin
     N := Stream.ReadData(LBuf, BUF_SIZE);
     if (N <= 0) then Break;
-    Result := Crypt.FastCRC32.ShaCrcRefresh(Result, Pointer(LBuf), N);
+    Result := System.ZLib.crc32(Result, Pointer(LBuf), N);
   end;
   Result := not Result;
 end;
