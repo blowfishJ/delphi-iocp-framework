@@ -23,11 +23,8 @@ ZY. 2012.04.19
 // 这会一定程度降低发送效率，但是能提高响应速度
 //{$define __TCP_NODELAY__}
 
-// ** 下面两个0拷贝参数不要打开，经过实际测试发现打开后反而速度会严重下降
-// ** 看来底层的缓存机制还是很高效的
-
 // 发送缓存0拷贝，发送数据时直接使用程序设定的缓存，不用拷贝到Socket底层缓存
-//{$define __TCP_SNDBUF_ZERO_COPY__}
+{$define __TCP_SNDBUF_ZERO_COPY__}
 
 // 接收缓存0拷贝，接收数据时直接使用程序设定的缓存，不用从Socket底层缓存拷贝
 //{$define __TCP_RCVBUF_ZERO_COPY__}
@@ -132,13 +129,16 @@ type
 
     function ErrorIsNorma(Err: Integer): Boolean;
 
-    procedure IncPendingRecv;
-    procedure DecPendingRecv;
+    procedure IncPendingRecv; inline;
+    procedure DecPendingRecv; inline;
+    function GetPendingRecv: Integer; inline;
+
     function PostReadZero: Boolean;
     function PostRead: Boolean;
 
-    procedure IncPendingSend;
-    procedure DecPendingSend;
+    procedure IncPendingSend; inline;
+    procedure DecPendingSend; inline;
+    function GetPendingSend: Integer; inline;
 
     function _Send(Buf: Pointer; Size: Integer): Integer; virtual;
     procedure _CloseSocket;
@@ -188,8 +188,8 @@ type
     property IsIdle: Boolean read GetIsIdle;
     property SndBufSize: Integer read FSndBufSize;
     property RcvBufSize: Integer read FRcvBufSize;
-    property PendingSend: Integer read FPendingSend;
-    property PendingRecv: Integer read FPendingRecv;
+    property PendingSend: Integer read GetPendingSend;
+    property PendingRecv: Integer read GetPendingRecv;
     property IsIPv6: Boolean read FIsIPv6;
     property ConnectionSource: TConnectionSource read FConnectionSource;
     {$IFDEF __TIME_OUT_TIMER__}
@@ -490,12 +490,12 @@ end;
 
 function TIocpSocketConnection.AddRef: Integer;
 begin
-  Result := InterlockedIncrement(FRefCount);
+  Result := TInterlocked.Increment(FRefCount);
 end;
 
 function TIocpSocketConnection.Release: Boolean;
 begin
-  Result := (InterlockedDecrement(FRefCount) = 0);
+  Result := (TInterlocked.Decrement(FRefCount) = 0);
   if not Result then Exit;
 
   _CloseSocket;
@@ -508,7 +508,7 @@ procedure TIocpSocketConnection.Disconnect;
 var
   PerIoData: PIocpPerIoData;
 begin
-  if (InterlockedExchange(FDisconnected, 1) <> 0) then Exit;
+  if (TInterlocked.Exchange(FDisconnected, 1) <> 0) then Exit;
 
   // 增加引用计数
   // 如果返回1则说明现在正在关闭连接
@@ -533,12 +533,12 @@ end;
 
 procedure TIocpSocketConnection.DecPendingRecv;
 begin
-  InterlockedDecrement(FPendingRecv);
+  TInterlocked.Decrement(FPendingRecv);
 end;
 
 procedure TIocpSocketConnection.DecPendingSend;
 begin
-  InterlockedDecrement(FPendingSend);
+  TInterlocked.Decrement(FPendingSend);
 end;
 
 procedure TIocpSocketConnection.Finalize;
@@ -547,7 +547,7 @@ end;
 
 function TIocpSocketConnection.GetIsClosed: Boolean;
 begin
-  Result := (InterlockedExchange(FDisconnected, FDisconnected) = 1);
+  Result := (TInterlocked.CompareExchange(FDisconnected, 0, 0) = 1);
 end;
 
 function TIocpSocketConnection.GetIsIdle: Boolean;
@@ -560,9 +560,19 @@ begin
   Result := TIocpTcpSocket(inherited Owner);
 end;
 
+function TIocpSocketConnection.GetPendingRecv: Integer;
+begin
+  Result := TInterlocked.CompareExchange(FPendingRecv, 0, 0);
+end;
+
+function TIocpSocketConnection.GetPendingSend: Integer;
+begin
+  Result := TInterlocked.CompareExchange(FPendingSend, 0, 0);
+end;
+
 function TIocpSocketConnection.GetRefCount: Integer;
 begin
-  Result := InterlockedExchange(FRefCount, FRefCount);
+  Result := TInterlocked.CompareExchange(FRefCount, 0, 0);
 end;
 
 function TIocpSocketConnection.InitSocket: Boolean;
@@ -587,7 +597,7 @@ begin
     AppendLog('%s.InitSocket.setsockopt.SO_SNDBUF ERROR %d=%s', [ClassName, WSAGetLastError, SysErrorMessage(WSAGetLastError)], ltWarning);
     Exit;
   end;
-  FSndBufSize := IoCachePool.BlockSize;
+  FSndBufSize := Owner.FIoCachePool.BlockSize;
 {$ELSE}
   OptLen := SizeOf(FSndBufSize);
   if (getsockopt(FSocket, SOL_SOCKET, SO_SNDBUF,
@@ -606,7 +616,7 @@ begin
     AppendLog('%s.InitSocket.setsockopt.SO_RCVBUF ERROR %d=%s', [ClassName, WSAGetLastError, SysErrorMessage(WSAGetLastError)], ltWarning);
     Exit;
   end;
-  FRcvBufSize := IoCachePool.BlockSize;
+  FRcvBufSize := Owner.FIoCachePool.BlockSize;
 {$ELSE}
   OptLen := SizeOf(FRcvBufSize);
   if (getsockopt(FSocket, SOL_SOCKET, SO_RCVBUF,
@@ -640,12 +650,12 @@ end;
 
 procedure TIocpSocketConnection.IncPendingRecv;
 begin
-  InterlockedIncrement(FPendingRecv);
+  TInterlocked.Increment(FPendingRecv);
 end;
 
 procedure TIocpSocketConnection.IncPendingSend;
 begin
-  InterlockedIncrement(FPendingSend);
+  TInterlocked.Increment(FPendingSend);
 end;
 
 procedure TIocpSocketConnection.Initialize;
@@ -911,7 +921,7 @@ begin
 
   IncPendingSend;
 
-  SndBuf := Owner.FIoCachePool.GetMemory(False);
+  SndBuf := Owner.FIoCachePool.GetMemory(False); // 分配发送缓存，发送完成之后释放
   CopyMemory(SndBuf, Buf, Size);
 
   PerIoData := Owner.AllocIoData(FSocket, iotWrite);
@@ -1943,11 +1953,10 @@ begin
       PerIoData.Buffer.DataBuf.Len := PerIoData.BytesTransfered;
 
       try
-        InterlockedIncrement(FPendingRequest);
+        TInterlocked.Increment(FPendingRequest);
         Connection.TriggerRecvData(PerIoData.Buffer.DataBuf.buf, PerIoData.Buffer.DataBuf.len);
-        //TriggerClientRecvData(Connection, PerIoData.Buffer.DataBuf.buf, PerIoData.Buffer.DataBuf.len);
       finally
-        InterlockedDecrement(FPendingRequest);
+        TInterlocked.Decrement(FPendingRequest);
       end;
 
       // 继续接收客户端数据
@@ -1981,8 +1990,8 @@ begin
       TInterlocked.Add(FSentBytes, PerIoData.BytesTransfered);
       PerIoData.Buffer.DataBuf.Len := PerIoData.BytesTransfered;
       Connection.TriggerSentData(PerIoData.Buffer.DataBuf.Buf, PerIoData.Buffer.DataBuf.Len);
-      FIoCachePool.FreeMemory(PerIoData.Buffer.DataBuf.Buf);
     finally
+      FIoCachePool.FreeMemory(PerIoData.Buffer.DataBuf.Buf); // 对应PostWrite中分配的发送内存块
       Connection.Release; // 对应PostWrite中的AddRef
     end;
   except
