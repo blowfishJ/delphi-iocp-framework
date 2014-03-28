@@ -360,8 +360,9 @@ type
     // Host设置为''时，如果系统支持IPv6则会同时监听IPv4及IPv6
     // ::1 = 127.0.0.1
     // :: = 0.0.0.0
-    function Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Boolean; overload;
-    function Listen(Port: Word; InitAcceptNum: Integer): Boolean; overload;
+    // Port设为0时，由系统自动分配监听端口，返回值就是实际的端口号
+    function Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Word; overload;
+    function Listen(Port: Word; InitAcceptNum: Integer): Word; overload;
     procedure StopListen(ListenSocket: TSocket);
     function AsyncConnect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer = nil): TSocket;
     function Connect(const RemoteAddr: string; RemotePort: Word; Tag: Pointer = nil; ConnectTimeout: DWORD = 10000): TIocpSocketConnection;
@@ -586,6 +587,8 @@ var
 {$IFDEF __TCP_NODELAY__}
   NagleValue: Byte;
 {$ENDIF}
+  LAliveIn, LAliveOut: tcp_keepalive;
+  LBytesReturn: Cardinal;
 begin
   Result := False;
 
@@ -635,6 +638,17 @@ begin
     Exit;
   end;
 {$ENDIF}
+
+  // 设置TCP心跳参数
+  LAliveIn.onoff := 1;
+  LAliveIn.keepalivetime := 10000; // 开始首次KeepAlive探测前的TCP空闭时间
+  LAliveIn.keepaliveinterval := 2000; // 两次KeepAlive探测的间隔 (探测5次，这个次数是TCP协议内部定义的，不能更改)
+  if (WSAIoctl(FSocket, SIO_KEEPALIVE_VALS, @LAliveIn, SizeOf(LAliveIn),
+    @LAliveOut, SizeOf(LAliveOut), @LBytesReturn, nil, nil) = SOCKET_ERROR) then
+  begin
+    AppendLog('%s.InitSocket.SIO_KEEPALIVE_VALS ERROR %d=%s', [ClassName, WSAGetLastError, SysErrorMessage(WSAGetLastError)], ltWarning);
+    Exit;
+  end;
 
   Result := True;
 end;
@@ -1614,7 +1628,7 @@ begin
   Result := (TInterlocked.Exchange(FShutdown, FShutdown) = 1);
 end;
 
-function TIocpTcpSocket.Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Boolean;
+function TIocpTcpSocket.Listen(const Host: string; Port: Word; InitAcceptNum: Integer): Word;
 const
   IPV6_V6ONLY = 27;
 var
@@ -1622,10 +1636,11 @@ var
   ListenSocket: TSocket;
   InAddrInfo: TAddrInfoW;
   POutAddrInfo, Ptr: PAddrInfoW;
+  Len: Integer;
   ListenCount: Integer;
   LastErr: Integer;
 begin
-  Result := False;
+  Result := 0;
   if IsShutdown or not Assigned(FAcceptThread) then Exit;
 
   try
@@ -1698,20 +1713,37 @@ begin
           Exit;
         end;
 
+        // 如果Port传入0，则监听随机端口，这里取得实际分配的端口号
+        if (Port = 0) then
+        begin
+          Len := Ptr.ai_addrlen;
+          if (getsockname(ListenSocket, Ptr.ai_addr, Len) = -1) then
+          begin
+            LastErr := WSAGetLastError;
+            AppendLog('%s.Listen.getsockname(Port=%d, Socket=%d), ERROR %d=%s', [ClassName, Port, ListenSocket, LastErr, SysErrorMessage(LastErr)], ltWarning);
+            Exit;
+          end;
+          Port := ntohs(Ptr.ai_addr.sin_port);
+        end;
+
+        // 如果端口传入0，让所有地址统一用首个分配到的端口
+        if (Ptr.ai_next <> niL) then
+          Ptr.ai_next.ai_addr.sin_port := Ptr.ai_addr.sin_port;
+
         Ptr := Ptr.ai_next;
       end;
     finally
       freeaddrinfo(POutAddrInfo);
     end;
 
-    Result := True;
+    Result := Port;
   except
     on e: Exception do
       AppendLog('%s.Listen ERROR %s=%s', [ClassName, e.ClassName, e.Message], ltException);
   end;
 end;
 
-function TIocpTcpSocket.Listen(Port: Word; InitAcceptNum: Integer): Boolean;
+function TIocpTcpSocket.Listen(Port: Word; InitAcceptNum: Integer): Word;
 begin
   Result := Listen('', Port, InitAcceptNum);
 end;
@@ -2282,7 +2314,8 @@ begin
   if FListened then Exit(True);
 
   StartupWorkers;
-  FListened := inherited Listen(FAddr, FPort, 1);
+  FPort := inherited Listen(FAddr, FPort, 1);
+  FListened := (FPort <> 0);
   Result := FListened;
 end;
 

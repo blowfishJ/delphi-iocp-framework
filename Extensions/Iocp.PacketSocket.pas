@@ -409,7 +409,8 @@ begin
   if FListened then Exit(True);
 
   StartupWorkers;
-  FListened := inherited Listen(FAddr, FPort, FInitAcceptNum);
+  FPort := inherited Listen(FAddr, FPort, FInitAcceptNum);
+  FListened := (FPort <> 0);
   Result := FListened;
   if Result then
     FStartTick := GetTickCount;
