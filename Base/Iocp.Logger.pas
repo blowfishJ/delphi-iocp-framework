@@ -154,7 +154,7 @@ end;
 
 procedure TIocpLogger.SetFilters(const Value: TLogTypeSets);
 begin
-  Filters := Value;
+  FFilters := Value;
 end;
 
 procedure TIocpLogger.SetShowConsole(const Value: Boolean);
