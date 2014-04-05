@@ -72,15 +72,20 @@ begin
 end;
 
 function TSimpleIocpTcpServer.Start: Boolean;
+var
+  LPort: Word;
 begin
   if FListened then Exit(True);
 
   StartupWorkers;
-  FPort := inherited Listen(FAddr, FPort, FInitAcceptNum);
-  FListened := (FPort <> 0);
+  LPort := inherited Listen(FAddr, FPort, FInitAcceptNum);
+  FListened := (LPort <> 0);
   Result := FListened;
   if Result then
+  begin
     FStartTick := GetTickCount;
+    FPort := LPort;
+  end;
 end;
 
 function TSimpleIocpTcpServer.Stop: Boolean;
