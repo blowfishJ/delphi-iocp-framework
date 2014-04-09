@@ -37,7 +37,11 @@ interface
 uses
   Windows, Messages, Classes, SysUtils, SyncObjs, Math, System.Generics.Collections,
   Iocp.Winsock2, Iocp.Wship6, Iocp.ApiFix, Iocp.ThreadPool, Iocp.MemoryPool,
-  Iocp.ObjectPool, Iocp.Queue, Iocp.TimerQueue, Iocp.Logger, Iocp.Utils;
+  Iocp.ObjectPool, Iocp.Queue,
+  {$ifdef __TIME_OUT_TIMER__}
+  Iocp.TimerQueue,
+  {$endif}
+  Iocp.Logger, Iocp.Utils;
 
 const
   SHUTDOWN_FLAG = ULONG_PTR(-1);
@@ -111,13 +115,11 @@ type
     FIsIPv6: Boolean;
     FConnectionSource: TConnectionSource;
     {$IFDEF __TIME_OUT_TIMER__}
-    FTimer: TIocpTimerQueueTimer;
+    FTimer: PTimer;
     FTimeout: DWORD;
     FLife: DWORD;
     // 连接超时检查
-    procedure OnTimerCreate(Sender: TObject);
-    procedure OnTimerExecute(Sender: TObject);
-    procedure OnTimerDestroy(Sender: TObject);
+    procedure OnTimerExecute;
     {$ENDIF}
 
     function GetRefCount: Integer;
@@ -293,7 +295,6 @@ type
     FConnectionListLocker: TCriticalSection;
     FAcceptThread: TIocpAcceptThread;
     {$IFDEF __TIME_OUT_TIMER__}
-    FTimerQueue: TIocpTimerQueue;
     FTimeout: DWORD;
     FClientLife: DWORD;
     {$ENDIF}
@@ -384,9 +385,6 @@ type
     property SentBytes: Int64 read FSentBytes;
     property RecvBytes: Int64 read FRecvBytes;
     property PendingRequest: Integer read FPendingRequest;
-    {$IFDEF __TIME_OUT_TIMER__}
-    property TimerQueue: TIocpTimerQueue read FTimerQueue;
-    {$ENDIF}
   published
     {$IFDEF __TIME_OUT_TIMER__}
     property Timeout: DWORD read FTimeout write FTimeout default 0;
@@ -462,9 +460,6 @@ begin
     Owner.FreeIoData(PerIoData);
 
     Release;
-    {$IFDEF __TIME_OUT_TIMER__}
-    FTimer.Release;
-    {$ENDIF}
   end;
 end;
 
@@ -480,6 +475,7 @@ end;
 
 procedure TIocpSocketConnection.Finalize;
 begin
+  TTimerQueue.RemoveTimer(FTimer);
 end;
 
 function TIocpSocketConnection.GetIsClosed: Boolean;
@@ -626,9 +622,7 @@ begin
   {$IFDEF __TIME_OUT_TIMER__}
   FTimeout := Owner.Timeout;
   FLife := Owner.ClientLife;
-  FTimer := TIocpTimerQueueTimer.Create(Owner.FTimerQueue, 1000, OnTimerCreate);
-  FTimer.OnTimer := OnTimerExecute;
-  FTimer.OnDestroy := OnTimerDestroy;
+  FTimer := TTimerQueue.NewTimer(1000, OnTimerExecute);
   {$ENDIF}
 end;
 
@@ -713,30 +707,15 @@ begin
 end;
 
 {$IFDEF __TIME_OUT_TIMER__}
-procedure TIocpSocketConnection.OnTimerCreate(Sender: TObject);
-begin
-  AddRef; // 为Timer增加连接引用计数
-end;
-
-procedure TIocpSocketConnection.OnTimerDestroy(Sender: TObject);
-begin
-  Release; // 对应Timer创建时的AddRef(procedure Initialize)
-end;
-
-procedure TIocpSocketConnection.OnTimerExecute(Sender: TObject);
+procedure TIocpSocketConnection.OnTimerExecute;
 begin
   try
-    if IsClosed then
-    begin
-      FTimer.Release; // 连接断开时，将Timer也释放掉，以免Timer再次触发引发异常访问
-      Exit;
-    end;
+    if IsClosed then Exit;
 
     // 超时,断开连接
     if (FTimeout > 0) and (FLastTick > 0) and (CalcTickDiff(FLastTick, GetTickCount) > FTimeout) then
     begin
       TriggerTimeout;
-      FTimer.Release; // 连接断开时，将Timer也释放掉，以免Timer再次触发引发异常访问
       Disconnect;
       Exit;
     end;
@@ -745,7 +724,6 @@ begin
     if (FLife > 0) and (FFirstTick > 0) and (CalcTickDiff(FFirstTick, GetTickCount) > FLife) then
     begin
       TriggerLifeout;
-      FTimer.Release; // 连接断开时，将Timer也释放掉，以免Timer再次触发引发异常访问
       Disconnect;
       Exit;
     end;
@@ -1337,18 +1315,12 @@ begin
     for Client in FConnectionList.Values.ToArray do
     begin
       Client._CloseSocket;
-      {$IFDEF __TIME_OUT_TIMER__}
-      Client.FTimer.Release;
-      {$ENDIF}
       Client.Release;
     end;
 
     for Client in FIdleConnectionList.Values.ToArray do
     begin
       Client._CloseSocket;
-      {$IFDEF __TIME_OUT_TIMER__}
-      Client.FTimer.Release;
-      {$ENDIF}
       Client.Release;
     end;
   finally
@@ -1871,9 +1843,6 @@ procedure TIocpTcpSocket.RequestDisconnectComplete(
 begin
   try
     Connection.Release;
-    {$IFDEF __TIME_OUT_TIMER__}
-    Connection.FTimer.Release;
-    {$ENDIF}
   finally
     Connection.Release; // 对应 Disconnect 中的 AddRef;
   end;
@@ -2003,11 +1972,6 @@ begin
     FIoThreadHandles[i] := FIoThreads[i].Handle;
   end;
 
-  {$IFDEF __TIME_OUT_TIMER__}
-  // 创建时钟队列
-  FTimerQueue := TIocpTimerQueue.Create;
-  {$ENDIF}
-
   // 创建监听线程
   FAcceptThread := TIocpAcceptThread.Create(Self);
 
@@ -2034,11 +1998,6 @@ begin
 
   // 断开所有连接
   DisconnectAll;
-
-  {$IFDEF __TIME_OUT_TIMER__}
-  // 释放时钟队列
-  FTimerQueue.Release;
-  {$ENDIF}
 
   {$IFDEF __TIME_OUT_TIMER__}
   if (FTimeout > 0) and (FTimeout < 5000) then
