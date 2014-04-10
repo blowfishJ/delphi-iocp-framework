@@ -1145,6 +1145,7 @@ begin
       begin
         Iocp.Winsock2.closesocket(ListenData.Socket);
         CloseHandle(ListenData.AcceptEvent);
+        FListenList.Remove(ListenData);
         Result := True;
         Break;
       end;
